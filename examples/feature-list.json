@@ -1,0 +1,32 @@
+{
+  "project": "{{PROJECT_NAME}}",
+  "last_updated": "YYYY-MM-DD",
+  "rules": {
+    "single_active_feature": true,
+    "passing_requires_evidence": true,
+    "do_not_skip_verification": true
+  },
+  "status_legend": {
+    "not_started": "Work has not begun.",
+    "in_progress": "Currently the active task. Only one feature may have this status.",
+    "blocked": "Cannot continue until the documented blocker is resolved.",
+    "passing": "Required verification passed and evidence is recorded."
+  },
+  "features": [
+    {
+      "id": "feat-001",
+      "priority": 1,
+      "area": "{{AREA}}",
+      "title": "{{FEATURE_TITLE}}",
+      "user_visible_behavior": "{{WHAT_THE_USER_SEES}}",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "{{VERIFICATION_STEP}}"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "YYYY-MM-DD"
+    }
+  ]
+}
