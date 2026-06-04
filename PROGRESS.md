@@ -1,10 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: not yet set up
-- Tests: not yet set up
-- Last verified: —
-- Active feature: none — scaffolding phase
+- Build: passing — dist/cli.js emitted, 1.44 KB
+- Tests: 2/2 passing (tests/cli.test.ts)
+- Typecheck: clean
+- Lint: clean
+- Last verified: 2026-06-04
+- Active feature: none — scaffold complete, next is feat-001 (audit loader)
 
 ## Completed
 - [x] Product design and stage definitions
@@ -13,9 +15,10 @@
 - [x] DECISIONS.md
 - [x] PROGRESS.md
 - [x] Example harness templates in examples/
+- [x] **feat-000: Project scaffold** — npm run build && npm test passing
 
 ## In progress
-- [ ] Project scaffolding — package.json, tsconfig, eslint, vitest config
+- nothing — scaffold complete, ready to start Stage 1 core
 
 ## Blocked
 - nothing currently
@@ -23,13 +26,16 @@
 ## Backlog — Stage 1
 
 ### Scaffolding
-- [ ] package.json with all scripts: build, typecheck, lint, test
-- [ ] tsconfig.json (strict)
-- [ ] eslint config
-- [ ] vitest config
-- [ ] tsup config
-- [ ] src/cli.ts — Commander entrypoint, registers audit command skeleton
-- [ ] Stub directories: src/init/, src/analyze/, src/drift/, src/fix/
+- [x] package.json with all scripts: build, typecheck, lint, test
+- [x] tsconfig.json (strict, NodeNext)
+- [x] eslint.config.js (typescript-eslint recommended)
+- [x] vitest.config.ts
+- [x] tsup.config.ts (cjs, dts, clean)
+- [x] src/cli.ts — Commander entrypoint, audit command stub
+- [x] Stub directories: src/audit/, src/init/, src/analyze/, src/drift/, src/fix/
+- [x] tests/cli.test.ts — smoke test (2 passing)
+- [x] feature_list.json — created, feat-000 marked passing
+- [x] features.md — created with all Stage 1 features defined
 
 ### Stage 1 core
 - [ ] src/audit/loader.ts — reads target repo files into memory

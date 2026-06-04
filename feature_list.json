@@ -1,0 +1,130 @@
+{
+  "project": "aiready",
+  "last_updated": "2026-06-04",
+  "rules": {
+    "single_active_feature": true,
+    "passing_requires_evidence": true,
+    "do_not_skip_verification": true
+  },
+  "status_legend": {
+    "not_started": "Work has not begun.",
+    "in_progress": "Currently the active task. Only one feature may have this status.",
+    "blocked": "Cannot continue until the documented blocker is resolved.",
+    "passing": "Required verification passed and evidence is recorded."
+  },
+  "features": [
+    {
+      "id": "feat-000",
+      "priority": 0,
+      "area": "infrastructure",
+      "title": "Project scaffold",
+      "user_visible_behavior": "npm run build && npm test pass on empty codebase",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 1.44 KB, build success in 3ms",
+        "npm test: 2 tests passed (tests/cli.test.ts)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "node dist/cli.js --version: 0.1.0",
+        "node dist/cli.js audit: audit command - not yet implemented"
+      ],
+      "agent_notes": "Scaffold complete. Node 18 in use; ESLint 9 warns about engine compatibility but runs cleanly.",
+      "last_updated": "2026-06-04"
+    },
+    {
+      "id": "feat-001",
+      "priority": 1,
+      "area": "audit",
+      "title": "Audit loader — read target repo files into memory",
+      "user_visible_behavior": "src/audit/loader.ts reads a target directory and returns a structured file map",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-04"
+    },
+    {
+      "id": "feat-002",
+      "priority": 2,
+      "area": "audit",
+      "title": "Audit scorer — score 5 subsystems",
+      "user_visible_behavior": "src/audit/scorer.ts scores identity, verification, state, memory, constraints from loaded files",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-04"
+    },
+    {
+      "id": "feat-003",
+      "priority": 3,
+      "area": "audit",
+      "title": "Audit cross-ref — validate docs vs project reality",
+      "user_visible_behavior": "src/audit/cross-ref.ts checks commands in AGENTS.md exist in package.json, modules in ARCHITECTURE.md match src/",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-04"
+    },
+    {
+      "id": "feat-004",
+      "priority": 4,
+      "area": "audit",
+      "title": "Audit reporter — terminal and JSON output",
+      "user_visible_behavior": "npx aiready audit prints scored gap report to terminal; --json flag outputs valid JSON",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "node dist/cli.js audit produces terminal output with 5 subsystem scores"
+      ],
+      "evidence": [],
+      "agent_notes": "",
+      "last_updated": "2026-06-04"
+    },
+    {
+      "id": "feat-005",
+      "priority": 5,
+      "area": "audit",
+      "title": "Stage 1 integration — end-to-end audit verification",
+      "user_visible_behavior": "npx aiready audit scores a well-harnessed repo > 70 and a bare repo < 30; --min-score exits 1 when below threshold",
+      "status": "not_started",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npx aiready audit --target examples/ returns score > 70",
+        "npx aiready audit --min-score 80 exits 1 when score is below threshold",
+        "npx aiready audit --json outputs valid JSON"
+      ],
+      "evidence": [],
+      "agent_notes": "Requires feat-001 through feat-004 to be passing first.",
+      "last_updated": "2026-06-04"
+    }
+  ]
+}
