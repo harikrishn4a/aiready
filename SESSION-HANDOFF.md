@@ -4,34 +4,37 @@
 2026-06-04
 
 ## What was completed
-- feat-000: Full project scaffold
-- package.json, tsconfig.json, tsup.config.ts, eslint.config.js, vitest.config.ts all created
-- src/cli.ts: Commander entrypoint, `audit` command stub, version 0.1.0
-- Stubs created: src/audit/, src/init/, src/analyze/, src/drift/, src/fix/
-- tests/cli.test.ts: 2 smoke tests passing
-- feature_list.json and features.md created with all Stage 1 features defined
-- PROGRESS.md updated
+- **Stage 1 complete** — all 5 features passing (feat-001 through feat-005)
+- feat-001: src/audit/loader.ts + src/utils/fs.ts + src/utils/detect.ts (stub)
+- feat-002: src/audit/scorer.ts — pure function, 5 subsystem scorers
+- feat-003: src/audit/cross-ref.ts — command, module, and freshness checks
+- feat-004: src/audit/reporter.ts — terminal + JSON output; full audit pipeline wired
+- feat-005: test-fixtures/, tests/integration.test.ts — 15 end-to-end tests
+- cli.ts fixed: uses require.main===module instead of VITEST env var guard
 
 ## Verification run
 | Command | Result |
 |---|---|
-| `npm run build` | pass — dist/cli.js 1.44 KB, zero errors |
-| `npm test` | pass — 2/2 tests (tests/cli.test.ts) |
+| `npm run build` | pass — dist/cli.js 15.49 KB, zero errors |
+| `npm test` | pass — 89/89 (cli 2, loader 13, scorer 32, cross-ref 14, reporter 13, integration 15) |
 | `npm run typecheck` | pass — zero errors |
 | `npm run lint` | pass — clean |
-| `node dist/cli.js --version` | 0.1.0 |
-| `node dist/cli.js audit` | audit command - not yet implemented |
+| `node dist/cli.js audit --target .` | AI Readiness: 100/100 |
+| `node dist/cli.js audit --target test-fixtures/good-repo` | 100/100, exit 0 |
+| `node dist/cli.js audit --target test-fixtures/bare-repo` | 0/100, exit 1 |
+| `node dist/cli.js audit --target test-fixtures/good-repo --json` | valid JSON, overall > 70 |
 
 ## What is broken or unverified
 - Nothing broken
-- Node 18 in use — ESLint 9 emits an engine compatibility warning at install time (`eslint-visitor-keys` wants Node >=20.19.0). Lint runs cleanly despite this.
+- src/utils/detect.ts is a stub (always returns 'unknown'). Used in Stage 2.
+- Node 18 in use — ESLint 9 warns at install time but runs cleanly.
 
 ## Next best step
-- Feature: feat-001 — Audit loader
-- Start from: create `src/audit/loader.ts` and `src/utils/fs.ts`
-- Pass when: loader reads a target directory and returns a typed file map; `npm test` passes with loader unit tests
+- Feature: Stage 2 — `npx aiready init`
+- Start from: design the init command in a TASK.md sprint contract
+- Pass when: `npx aiready init --target <bare-repo>` generates missing harness artifacts
 
 ## Must not change
-- No Stage 2+ code written while feat-001 through feat-005 are in progress
-- No LLM dependencies added in Stage 1
-- examples/ directory is reference-only — do not modify during Stage 1 work
+- Stage 1 src/ modules are complete — do not modify without a feat-00X entry in feature_list.json
+- No LLM dependencies until Stage 2 is explicitly started
+- test-fixtures/ are integration test fixtures — do not use for manual experiments
