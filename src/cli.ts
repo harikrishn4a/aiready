@@ -21,7 +21,7 @@ program
     });
   });
 
-// Skip parse when imported in tests
-if (!process.env['VITEST']) {
+// Parse only when run as CLI entry point, not when imported in tests
+if (require.main === module) {
   program.parse(process.argv);
 }
