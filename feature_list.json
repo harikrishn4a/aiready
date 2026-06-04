@@ -114,16 +114,23 @@
       "area": "audit",
       "title": "Audit reporter — terminal and JSON output",
       "user_visible_behavior": "npx aiready audit prints scored gap report to terminal; --json flag outputs valid JSON",
-      "status": "not_started",
+      "status": "passing",
       "blocked_reason": "",
       "verification": [
         "npm run build",
         "npm test",
         "npm run typecheck",
-        "node dist/cli.js audit produces terminal output with 5 subsystem scores"
+        "npm run lint",
+        "node dist/cli.js audit --target . produces terminal output with 5 subsystem scores"
       ],
-      "evidence": [],
-      "agent_notes": "",
+      "evidence": [
+        "npm run build: dist/cli.js 15.49 KB (full pipeline bundled), zero errors",
+        "npm test: 74 passed (cli 2, loader 13, scorer 32, cross-ref 14, reporter 13)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "node dist/cli.js audit --target .: AI Readiness: 100/100 — all 5 subsystems shown with bars"
+      ],
+      "agent_notes": "audit/index.ts wires loader→scorer→cross-ref→reporter. cli.ts updated with --target, --json, --min-score options.",
       "last_updated": "2026-06-04"
     },
     {

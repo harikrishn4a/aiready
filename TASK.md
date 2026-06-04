@@ -1,31 +1,33 @@
 # TASK.md — Sprint Contract
 
 ## Feature
-- ID: feat-003
-- Title: Audit cross-ref — validate docs vs project reality
+- ID: feat-004
+- Title: Audit reporter — terminal and JSON output + wire-up
 
 ## Scope — what will change
-- src/audit/cross-ref.ts (new)
-- tests/cross-ref.test.ts (new)
+- src/audit/reporter.ts (new) — formats terminal and JSON output
+- src/audit/index.ts (replace stub) — audit command handler
+- src/cli.ts (update) — wire audit command to real handler
+- tests/reporter.test.ts (new) — unit tests
 
 ## Exclusions — what will NOT change
-- src/audit/index.ts — stays as stub
-- src/cli.ts — no changes
-- No output logic
+- No scorer or loader changes
+- No cross-ref changes
 
 ## Verification standard
 - npm run build
 - npm test
 - npm run typecheck
 - npm run lint
+- node dist/cli.js audit --target . produces terminal output with 5 subsystem scores
 
 ## Acceptance criteria
-- crossRef(files) returns CrossRefResult with named checks
-- Checks: npm commands in AGENTS.md exist in package.json scripts
-- Checks: modules in ARCHITECTURE.md match actual src/ directories
-- Checks: PROGRESS.md last-modified within 7 days
-- Each check has passed: boolean and detail: string
+- Terminal output shows overall score, 5 subsystem bars, gaps, recommendation
+- --json flag outputs parseable JSON matching the spec in ARCHITECTURE.md
+- --target option defaults to . (cwd)
+- --min-score option defaults to 70; exits 1 when score is below threshold
 
 ## Invariants — must remain true throughout
-- cross-ref.ts must only validate — no scoring, no output
-- cross-ref.ts must not modify any file
+- reporter.ts must only format and print — no business logic
+- cli.ts must not contain scoring or file reading logic
+- existing 61 tests continue to pass
