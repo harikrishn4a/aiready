@@ -68,15 +68,21 @@
       "area": "audit",
       "title": "Audit scorer — score 5 subsystems",
       "user_visible_behavior": "src/audit/scorer.ts scores identity, verification, state, memory, constraints from loaded files",
-      "status": "not_started",
+      "status": "passing",
       "blocked_reason": "",
       "verification": [
         "npm run build",
         "npm test",
-        "npm run typecheck"
+        "npm run typecheck",
+        "npm run lint"
       ],
-      "evidence": [],
-      "agent_notes": "",
+      "evidence": [
+        "npm run build: dist/cli.js, zero errors",
+        "npm test: 47 passed (cli 2, loader 13, scorer 32)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean"
+      ],
+      "agent_notes": "Pure function. Scores content quality not file presence. Well-harnessed fixture scores >70.",
       "last_updated": "2026-06-04"
     },
     {
