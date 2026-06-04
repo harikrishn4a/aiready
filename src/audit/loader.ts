@@ -1,5 +1,25 @@
 import { join } from 'path';
-import { readFile, listDirs, listFiles, statMtime } from '../utils/fs.js';
+import { readFile, listDirs, listFiles, statMtime, exists } from '../utils/fs.js';
+
+const AGENT_ENTRY_CANDIDATES = [
+  'AGENTS.md',
+  'CLAUDE.md',
+  'AGENT.md',
+  '.cursorrules',
+  '.windsurfrules',
+  '.github/copilot-instructions.md',
+  'COPILOT.md',
+] as const;
+
+function loadAgentEntry(targetDir: string): string | null {
+  for (const rel of AGENT_ENTRY_CANDIDATES) {
+    const filePath = join(targetDir, rel);
+    if (exists(filePath)) {
+      return readFile(filePath);
+    }
+  }
+  return null;
+}
 
 export interface RepoFiles {
   agentsMd: string | null;
@@ -28,8 +48,7 @@ export function loadRepo(targetDir: string): RepoFiles {
     }
   }
 
-  // Accept common agent file aliases
-  const agentsMd = read('AGENTS.md') ?? read('agents.md') ?? read('.agents.md');
+  const agentsMd = loadAgentEntry(targetDir);
   const architectureMd = read('ARCHITECTURE.md') ?? read('architecture.md');
   const constraintsMd = read('CONSTRAINTS.md') ?? read('constraints.md');
   const progressMd = read('PROGRESS.md') ?? read('progress.md');

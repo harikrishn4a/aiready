@@ -1,3 +1,7 @@
+> Note: aiready audit recognises AGENTS.md, CLAUDE.md, AGENT.md,
+> .cursorrules, and .windsurfrules as valid entry points.
+> AGENTS.md is recommended for broadest agent compatibility.
+
 # AGENTS.md — AIReady
 
 ## What this is

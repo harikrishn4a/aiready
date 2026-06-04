@@ -34,9 +34,26 @@ describe('loadRepo', () => {
     expect(loadRepo(tmp).agentsMd).toContain('Agent Guide');
   });
 
-  it('falls back to lowercase agents.md', () => {
-    writeFileSync(join(tmp, 'agents.md'), '# agents lowercase');
-    expect(loadRepo(tmp).agentsMd).toContain('agents lowercase');
+  it('reads CLAUDE.md when AGENTS.md is absent', () => {
+    writeFileSync(join(tmp, 'CLAUDE.md'), '# Claude project guide');
+    expect(loadRepo(tmp).agentsMd).toContain('Claude project guide');
+  });
+
+  it('prefers AGENTS.md over other agent entry candidates', () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# primary agents');
+    writeFileSync(join(tmp, 'CLAUDE.md'), '# secondary claude');
+    expect(loadRepo(tmp).agentsMd).toContain('primary agents');
+  });
+
+  it('reads .cursorrules as agent entry', () => {
+    writeFileSync(join(tmp, '.cursorrules'), 'Use TypeScript strict mode.');
+    expect(loadRepo(tmp).agentsMd).toContain('TypeScript strict');
+  });
+
+  it('reads nested .github/copilot-instructions.md', () => {
+    mkdirSync(join(tmp, '.github'), { recursive: true });
+    writeFileSync(join(tmp, '.github', 'copilot-instructions.md'), '# Copilot rules');
+    expect(loadRepo(tmp).agentsMd).toContain('Copilot rules');
   });
 
   it('reads ARCHITECTURE.md', () => {
