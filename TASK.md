@@ -1,17 +1,17 @@
 # TASK.md — Sprint Contract
 
 ## Feature
-- ID: feat-002
-- Title: Audit scorer — score 5 subsystems
+- ID: feat-003
+- Title: Audit cross-ref — validate docs vs project reality
 
 ## Scope — what will change
-- src/audit/scorer.ts (new) — pure scoring function, no filesystem reads
-- tests/scorer.test.ts (new) — unit tests for each subsystem
+- src/audit/cross-ref.ts (new)
+- tests/cross-ref.test.ts (new)
 
 ## Exclusions — what will NOT change
 - src/audit/index.ts — stays as stub
 - src/cli.ts — no changes
-- No output, no cross-ref logic
+- No output logic
 
 ## Verification standard
 - npm run build
@@ -20,13 +20,12 @@
 - npm run lint
 
 ## Acceptance criteria
-- scoreRepo(files) returns ScoredResult with 5 subsystem scores + overall
-- Each subsystem scores 0–100
-- Well-harnessed input scores > 70 overall
-- Empty/missing input scores 0 overall
-- scorer is pure — same input always produces same output
+- crossRef(files) returns CrossRefResult with named checks
+- Checks: npm commands in AGENTS.md exist in package.json scripts
+- Checks: modules in ARCHITECTURE.md match actual src/ directories
+- Checks: PROGRESS.md last-modified within 7 days
+- Each check has passed: boolean and detail: string
 
 ## Invariants — must remain true throughout
-- scorer.ts must not read from filesystem
-- scorer.ts must not make network requests
-- scorer.ts must not import from loader.ts (uses RepoFiles type only)
+- cross-ref.ts must only validate — no scoring, no output
+- cross-ref.ts must not modify any file

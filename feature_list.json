@@ -91,15 +91,21 @@
       "area": "audit",
       "title": "Audit cross-ref — validate docs vs project reality",
       "user_visible_behavior": "src/audit/cross-ref.ts checks commands in AGENTS.md exist in package.json, modules in ARCHITECTURE.md match src/",
-      "status": "not_started",
+      "status": "passing",
       "blocked_reason": "",
       "verification": [
         "npm run build",
         "npm test",
-        "npm run typecheck"
+        "npm run typecheck",
+        "npm run lint"
       ],
-      "evidence": [],
-      "agent_notes": "",
+      "evidence": [
+        "npm run build: zero errors",
+        "npm test: 61 passed (cli 2, loader 13, scorer 32, cross-ref 14)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean"
+      ],
+      "agent_notes": "Extracts npm run commands from bash blocks only (not prose). Detects modules via ← annotations.",
       "last_updated": "2026-06-04"
     },
     {
