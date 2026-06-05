@@ -71,7 +71,7 @@ async function promptModelId(provider: ProviderName, apiKey: string | undefined)
   // openai — fetch available models dynamically, fall back to static list
   const models = await listOpenAIModels(apiKey!);
   return select({
-    message: 'Select model:',
+    message: 'Select model: (chat-compatible models only)',
     choices: models.map((m) => ({ name: m.label, value: m.id })),
   });
 }

@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { AnthropicProvider, OpenAIProvider, OllamaProvider, createProvider, listOpenAIModels } from '../src/utils/llm';
+import {
+  AnthropicProvider,
+  OpenAIProvider,
+  OllamaProvider,
+  createProvider,
+  isChatCompatibleOpenAIModel,
+  listOpenAIModels,
+} from '../src/utils/llm';
 
 // Mock both SDKs — llm.ts is the only file that imports them
 vi.mock('@anthropic-ai/sdk', () => {
@@ -186,6 +193,40 @@ describe('listOpenAIModels', () => {
     expect(models.map((m) => m.id)).not.toContain('gpt-4o:ft-acme-2024');
   });
 
+  it('includes o1 and o3 chat models', async () => {
+    const list = await getOpenAIList();
+    list.mockResolvedValue({
+      data: [
+        { id: 'o1', created: 3 },
+        { id: 'o3-mini', created: 2 },
+        { id: 'gpt-4o', created: 1 },
+      ],
+    });
+    const ids = (await listOpenAIModels('test-key')).map((m) => m.id);
+    expect(ids).toContain('o1');
+    expect(ids).toContain('o3-mini');
+  });
+
+  it('excludes non-chat OpenAI model families', async () => {
+    const list = await getOpenAIList();
+    list.mockResolvedValue({
+      data: [
+        { id: 'gpt-4o', created: 10 },
+        { id: 'gpt-4o-codex', created: 9 },
+        { id: 'gpt-image-1', created: 8 },
+        { id: 'gpt-4o-mini-tts', created: 7 },
+        { id: 'gpt-4o-transcribe', created: 6 },
+        { id: 'whisper-1', created: 5 },
+        { id: 'computer-use-preview', created: 4 },
+        { id: 'gpt-4o-search-preview', created: 3 },
+        { id: 'gpt-4o-realtime-preview', created: 2 },
+        { id: 'text-embedding-ada-002', created: 1 },
+      ],
+    });
+    const ids = (await listOpenAIModels('test-key')).map((m) => m.id);
+    expect(ids).toEqual(['gpt-4o']);
+  });
+
   it('returns fallback models when API call throws', async () => {
     const list = await getOpenAIList();
     list.mockRejectedValue(new Error('network error'));
@@ -200,6 +241,21 @@ describe('listOpenAIModels', () => {
     const models = await listOpenAIModels('test-key');
     // all filtered out → fallback
     expect(models[0]?.id).toBe('gpt-4o-mini');
+  });
+});
+
+describe('isChatCompatibleOpenAIModel', () => {
+  it('accepts gpt-, o1, and o3 families', () => {
+    expect(isChatCompatibleOpenAIModel('gpt-4o-mini')).toBe(true);
+    expect(isChatCompatibleOpenAIModel('o1')).toBe(true);
+    expect(isChatCompatibleOpenAIModel('o3-mini')).toBe(true);
+  });
+
+  it('rejects non-chat interfaces and fine-tunes', () => {
+    expect(isChatCompatibleOpenAIModel('whisper-1')).toBe(false);
+    expect(isChatCompatibleOpenAIModel('gpt-4o-codex')).toBe(false);
+    expect(isChatCompatibleOpenAIModel('gpt-4o:ft-acme')).toBe(false);
+    expect(isChatCompatibleOpenAIModel('gpt-4o-realtime-preview')).toBe(false);
   });
 });
 

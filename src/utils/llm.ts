@@ -96,13 +96,36 @@ export class OllamaProvider implements LLMProvider {
 
 // ── Model discovery ───────────────────────────────────────────────────────────
 
+const NON_CHAT_MODEL_SUBSTRINGS = [
+  'codex',          // coding agent — different API surface
+  'image',          // image generation
+  'tts',            // text to speech
+  'transcribe',     // audio to text
+  'whisper',        // audio transcription
+  'computer-use',   // computer use agent
+  'search-preview', // search-augmented interface
+  'realtime',       // realtime audio API
+] as const;
+
+/** True when model ID is a chat-completions-compatible OpenAI model. */
+export function isChatCompatibleOpenAIModel(id: string): boolean {
+  const isChatFamily =
+    id.startsWith('gpt-') ||
+    id.startsWith('o1') ||
+    id.startsWith('o3');
+  if (!isChatFamily || id.includes(':')) {
+    return false;
+  }
+  return !NON_CHAT_MODEL_SUBSTRINGS.some((s) => id.includes(s));
+}
+
 export async function listOpenAIModels(apiKey: string): Promise<ModelDef[]> {
   try {
     const baseURL = process.env['OPENAI_BASE_URL'];
     const client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
     const response = await client.models.list();
     const chatModels = response.data
-      .filter((m) => m.id.startsWith('gpt-') && !m.id.includes(':'))
+      .filter((m) => isChatCompatibleOpenAIModel(m.id))
       .sort((a, b) => b.created - a.created) // newest first
       .map((m) => ({ id: m.id, label: m.id }));
     return chatModels.length > 0 ? chatModels : OPENAI_FALLBACK_MODELS;

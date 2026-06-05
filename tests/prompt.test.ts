@@ -1,10 +1,23 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { selectAuditConfig } from '../src/utils/prompt';
+
+const { mockListOpenAIModels } = vi.hoisted(() => ({
+  mockListOpenAIModels: vi.fn(),
+}));
 
 // Mock @inquirer/prompts so tests never block on stdin
 vi.mock('@inquirer/prompts', () => ({
   select: vi.fn(),
 }));
+
+vi.mock('../src/utils/llm', async (importOriginal) => {
+  const mod = await importOriginal<typeof import('../src/utils/llm')>();
+  return {
+    ...mod,
+    listOpenAIModels: mockListOpenAIModels,
+  };
+});
+
+import { selectAuditConfig } from '../src/utils/prompt';
 
 async function getSelect() {
   const m = await import('@inquirer/prompts');
@@ -154,5 +167,26 @@ describe('selectAuditConfig — interactive (no flags)', () => {
     const config = await selectAuditConfig({});
     expect(config.modelId).toBe('mistral');
     delete process.env['OLLAMA_MODEL'];
+  });
+
+  it('shows chat-compatible note in OpenAI model prompt', async () => {
+    process.env['OPENAI_API_KEY'] = 'key';
+    mockListOpenAIModels.mockResolvedValue([
+      { id: 'gpt-4o-mini', label: 'gpt-4o-mini' },
+      { id: 'gpt-4o', label: 'gpt-4o' },
+    ]);
+    const select = await getSelect();
+    select
+      .mockResolvedValueOnce('openai')
+      .mockResolvedValueOnce('gpt-4o');
+
+    await selectAuditConfig({});
+
+    expect(mockListOpenAIModels).toHaveBeenCalledWith('key');
+    expect(select).toHaveBeenCalledTimes(2);
+    expect(select.mock.calls[1]?.[0]).toMatchObject({
+      message: 'Select model: (chat-compatible models only)',
+    });
+    delete process.env['OPENAI_API_KEY'];
   });
 });
