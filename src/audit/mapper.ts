@@ -8,7 +8,7 @@ export interface FileMapping {
   subsystems: Subsystem[];
 }
 
-const TRIAGE_SYSTEM = `You are a repository analyst. Given a list of files with short previews,
+const TRIAGE_SYSTEM = `You are a repository analyst. Given a list of file paths,
 identify which files could plausibly serve as harness artifacts for AI
 coding agents.
 
@@ -85,14 +85,13 @@ function parseMapperResponse(text: string): FileMapping[] {
   }
 }
 
-async function triageFiles(mdFiles: RepoFile[], provider: LLMProvider): Promise<string[]> {
-  const fileList = mdFiles
-    .map((f) => `- path: ${f.path}\n  preview: ${JSON.stringify(firstLines(f.fullContent, 5))}`)
-    .join('\n');
+// Sends filenames only — no content previews — to minimise triage cost
+async function triageByFilename(mdFiles: RepoFile[], provider: LLMProvider): Promise<string[]> {
+  const fileList = mdFiles.map((f) => `- ${f.path}`).join('\n');
 
   const text = await provider.chat(
     TRIAGE_SYSTEM,
-    `Identify harness-relevant files:\n\n${fileList}`,
+    `Identify harness-relevant files from these paths:\n\n${fileList}`,
     { fast: true },
   );
   return parseTriageResponse(text);
@@ -114,10 +113,19 @@ async function classifyFiles(
   return parseMapperResponse(text);
 }
 
-export async function mapFiles(mdFiles: RepoFile[], provider: LLMProvider): Promise<FileMapping[]> {
+export async function mapFiles(
+  mdFiles: RepoFile[],
+  provider: LLMProvider,
+  usedGraphify = false,
+): Promise<FileMapping[]> {
   if (mdFiles.length === 0) return [];
 
-  const relevantPaths = await triageFiles(mdFiles, provider);
+  // Graphify already ranked files by centrality — skip triage
+  if (usedGraphify) {
+    return classifyFiles(mdFiles, provider);
+  }
+
+  const relevantPaths = await triageByFilename(mdFiles, provider);
   if (relevantPaths.length === 0) return [];
 
   const pathSet = new Set(relevantPaths);

@@ -19,7 +19,7 @@ export async function runAudit(target: string, opts: AuditOptions): Promise<void
 
   const targetDir = resolve(target);
   const files = loadRepo(targetDir);
-  const mappings = await mapFiles(files.mdFiles, provider);
+  const mappings = await mapFiles(files.mdFiles, provider, files.usedGraphify);
   const scored = await scoreRepo(files, mappings, provider);
   const totalTokens = provider.getTotalTokens();
   report(scored, { json: opts.json, tokenUsage: totalTokens });

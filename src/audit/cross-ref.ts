@@ -1,4 +1,5 @@
 import type { RepoFiles } from './loader.js';
+import type { FileMapping } from './mapper.js';
 
 export interface CrossRefCheck {
   name: string;
@@ -36,24 +37,40 @@ function extractDocumentedModules(content: string): string[] {
   return [...new Set(modules)];
 }
 
-function checkCommands(files: RepoFiles): CrossRefCheck[] {
-  if (!files.agentsMd) {
+function checkCommands(
+  files: RepoFiles,
+  mappings: FileMapping[],
+  mdFileMap: Map<string, string>,
+): CrossRefCheck[] {
+  // Prefer the canonical agent entry file; fall back to identity/verification mapped files
+  let contentToCheck: string | null = files.agentsMd;
+
+  if (!contentToCheck && mappings.length > 0) {
+    const mapped = mappings
+      .filter((m) => m.subsystems.includes('identity') || m.subsystems.includes('verification'))
+      .map((m) => mdFileMap.get(m.path))
+      .filter((c): c is string => c !== undefined)
+      .join('\n\n');
+    if (mapped) contentToCheck = mapped;
+  }
+
+  if (!contentToCheck) {
     return [
       {
         name: 'commands-in-agents-exist-in-package',
         passed: false,
-        detail: 'No AGENTS.md to extract commands from',
+        detail: 'No agent harness file found to extract commands from',
       },
     ];
   }
 
-  const commands = extractNpmRunCommands(files.agentsMd);
+  const commands = extractNpmRunCommands(contentToCheck);
   if (commands.length === 0) {
     return [
       {
         name: 'commands-in-agents-exist-in-package',
         passed: true,
-        detail: 'No npm run commands found in AGENTS.md bash blocks',
+        detail: 'No npm run commands found in harness bash blocks',
       },
     ];
   }
@@ -69,7 +86,7 @@ function checkCommands(files: RepoFiles): CrossRefCheck[] {
       {
         name: 'commands-in-agents-exist-in-package',
         passed: true,
-        detail: `All ${commands.length} npm run command(s) in AGENTS.md found in package.json scripts`,
+        detail: `All ${commands.length} npm run command(s) in harness found in package.json scripts`,
       },
     ];
   }
@@ -77,25 +94,41 @@ function checkCommands(files: RepoFiles): CrossRefCheck[] {
   return missing.map((cmd) => ({
     name: 'commands-in-agents-exist-in-package',
     passed: false,
-    detail: `\`npm run ${cmd}\` in AGENTS.md not found in package.json scripts`,
+    detail: `\`npm run ${cmd}\` in harness not found in package.json scripts`,
   }));
 }
 
-function checkModules(files: RepoFiles): CrossRefCheck {
-  if (!files.architectureMd) {
+function checkModules(
+  files: RepoFiles,
+  mappings: FileMapping[],
+  mdFileMap: Map<string, string>,
+): CrossRefCheck {
+  // Prefer canonical architecture file; fall back to memory-mapped files
+  let contentToCheck: string | null = files.architectureMd;
+
+  if (!contentToCheck && mappings.length > 0) {
+    const mapped = mappings
+      .filter((m) => m.subsystems.includes('memory'))
+      .map((m) => mdFileMap.get(m.path))
+      .filter((c): c is string => c !== undefined)
+      .join('\n\n');
+    if (mapped) contentToCheck = mapped;
+  }
+
+  if (!contentToCheck) {
     return {
       name: 'architecture-modules-match-src',
       passed: false,
-      detail: 'No ARCHITECTURE.md to extract documented modules from',
+      detail: 'No architecture file found to extract documented modules from',
     };
   }
 
-  const documented = extractDocumentedModules(files.architectureMd);
+  const documented = extractDocumentedModules(contentToCheck);
   if (documented.length === 0) {
     return {
       name: 'architecture-modules-match-src',
       passed: true,
-      detail: 'No annotated module directories found in ARCHITECTURE.md',
+      detail: 'No annotated module directories found in architecture file',
     };
   }
 
@@ -111,7 +144,7 @@ function checkModules(files: RepoFiles): CrossRefCheck {
   return {
     name: 'architecture-modules-match-src',
     passed: false,
-    detail: `Module(s) in ARCHITECTURE.md not found in src/: ${missing.join(', ')}`,
+    detail: `Module(s) in architecture file not found in src/: ${missing.join(', ')}`,
   };
 }
 
@@ -142,11 +175,12 @@ function checkProgressFreshness(files: RepoFiles): CrossRefCheck {
   };
 }
 
-export function crossRef(files: RepoFiles): CrossRefResult {
+export function crossRef(files: RepoFiles, mappings: FileMapping[] = []): CrossRefResult {
+  const mdFileMap = new Map(files.mdFiles.map((f) => [f.path, f.fullContent]));
   return {
     checks: [
-      ...checkCommands(files),
-      checkModules(files),
+      ...checkCommands(files, mappings, mdFileMap),
+      checkModules(files, mappings, mdFileMap),
       checkProgressFreshness(files),
     ],
   };

@@ -87,7 +87,7 @@ describe('mapFiles — invalid LLM responses', () => {
 });
 
 describe('mapFiles — prompt content', () => {
-  it('sends 5-line previews in triage and 50-line previews in classification', async () => {
+  it('sends filenames-only in triage and 50-line previews in classification', async () => {
     const lines = Array.from({ length: 60 }, (_, i) => `line-${i + 1}`).join('\n');
     const provider = makeProvider(
       JSON.stringify({ relevant: ['AGENTS.md'] }),
@@ -98,9 +98,21 @@ describe('mapFiles — prompt content', () => {
     const triageMsg = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0]?.[1] as string;
     const classifyMsg = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[1]?.[1] as string;
 
-    expect(triageMsg).toContain('line-5');
-    expect(triageMsg).not.toContain('line-6');
+    // Triage sends only the filename — no content
+    expect(triageMsg).toContain('AGENTS.md');
+    expect(triageMsg).not.toContain('line-1');
+    // Classification sends 50-line preview
     expect(classifyMsg).toContain('line-50');
     expect(classifyMsg).not.toContain('line-51');
+  });
+
+  it('skips triage and goes straight to classify when usedGraphify is true', async () => {
+    const provider = makeProvider(
+      JSON.stringify({ mappings: [{ path: 'AGENTS.md', subsystems: ['identity'] }] }),
+    );
+    const result = await mapFiles([makeFile('AGENTS.md')], provider, true);
+    expect(provider.chat).toHaveBeenCalledTimes(1); // classify only, no triage
+    expect(result[0]?.path).toBe('AGENTS.md');
+    expect(result[0]?.subsystems).toContain('identity');
   });
 });

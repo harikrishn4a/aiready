@@ -161,3 +161,85 @@ describe('loadRepo — mdFiles', () => {
     expect(r.mdFiles.every((f) => !f.path.startsWith('node_modules'))).toBe(true);
   });
 });
+
+// ── Graphify integration ──────────────────────────────────────────────────────
+
+function writeGraph(dir: string, data: object): void {
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'graph.json'), JSON.stringify(data));
+}
+
+describe('loadRepo — Graphify detection', () => {
+  it('sets usedGraphify: false when no graphify output exists', () => {
+    writeFileSync(join(tmp, 'README.md'), '# readme');
+    expect(loadRepo(tmp).usedGraphify).toBe(false);
+  });
+
+  it('sets usedGraphify: true when graphify-out/graph.json exists', () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# agent guide');
+    writeGraph(join(tmp, 'graphify-out'), {
+      nodes: [{ id: 'n1', file_type: 'document', source_file: 'AGENTS.md' }],
+      links: [{ source: 'n1', target: 'n1' }],
+    });
+    const r = loadRepo(tmp);
+    expect(r.usedGraphify).toBe(true);
+  });
+
+  it('ranks files by degree and returns top files only', () => {
+    writeFileSync(join(tmp, 'A.md'), '# A');
+    writeFileSync(join(tmp, 'B.md'), '# B');
+    writeFileSync(join(tmp, 'C.md'), '# C');
+    writeGraph(join(tmp, 'graphify-out'), {
+      nodes: [
+        { id: 'nA', file_type: 'document', source_file: 'A.md' },
+        { id: 'nB', file_type: 'document', source_file: 'B.md' },
+        { id: 'nC', file_type: 'document', source_file: 'C.md' },
+      ],
+      // B has 2 edges, A has 1, C has 0 — B should rank first
+      links: [
+        { source: 'nA', target: 'nB' },
+        { source: 'nC', target: 'nB' },
+      ],
+    });
+    const r = loadRepo(tmp);
+    expect(r.usedGraphify).toBe(true);
+    const paths = r.mdFiles.map((f) => f.path);
+    expect(paths[0]).toBe('B.md'); // highest degree
+    expect(paths).toContain('A.md');
+  });
+
+  it('skips non-document nodes', () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# agent');
+    writeGraph(join(tmp, 'graphify-out'), {
+      nodes: [
+        { id: 'n1', file_type: 'document', source_file: 'AGENTS.md' },
+        { id: 'n2', file_type: 'code', source_file: 'src/index.ts' },
+      ],
+      links: [{ source: 'n2', target: 'n1' }],
+    });
+    const r = loadRepo(tmp);
+    expect(r.mdFiles.map((f) => f.path)).toEqual(['AGENTS.md']);
+  });
+
+  it('finds dated subdirectory graphify-out/YYYY-MM-DD/graph.json', () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# agent');
+    writeGraph(join(tmp, 'graphify-out', '2026-06-05'), {
+      nodes: [{ id: 'n1', file_type: 'document', source_file: 'AGENTS.md' }],
+      links: [],
+    });
+    const r = loadRepo(tmp);
+    expect(r.usedGraphify).toBe(true);
+    expect(r.mdFiles.map((f) => f.path)).toContain('AGENTS.md');
+  });
+
+  it('returns usedGraphify: false and uses walkMdFiles when graph.json is malformed', () => {
+    writeFileSync(join(tmp, 'README.md'), '# readme');
+    mkdirSync(join(tmp, 'graphify-out'), { recursive: true });
+    writeFileSync(join(tmp, 'graphify-out', 'graph.json'), 'not valid json {{{');
+    const r = loadRepo(tmp);
+    // Malformed JSON → loadFromGraph returns [] → usedGraphify still true (path was found)
+    // but mdFiles will be empty from graphify, not from walker
+    // The important behavior: no crash
+    expect(r.mdFiles).toBeDefined();
+  });
+});

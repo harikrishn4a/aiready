@@ -1,9 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { crossRef } from '../src/audit/cross-ref';
 import type { RepoFiles } from '../src/audit/loader';
+import type { FileMapping } from '../src/audit/mapper';
 
 function makeFiles(overrides: Partial<RepoFiles> = {}): RepoFiles {
   return {
+    mdFiles: [],
+    usedGraphify: false,
     agentsMd: null,
     architectureMd: null,
     constraintsMd: null,
@@ -160,5 +163,79 @@ describe('crossRef — result structure', () => {
       expect(typeof c.passed).toBe('boolean');
       expect(typeof c.detail).toBe('string');
     });
+  });
+});
+
+// ── Mapped-file fallback ──────────────────────────────────────────────────────
+
+const MAPPED_AGENTS_CONTENT = `# Claude guide
+\`\`\`bash
+npm run build
+npm run test
+\`\`\`
+`;
+
+const MAPPED_ARCH_CONTENT = `# Architecture
+\`\`\`
+src/
+  audit/        ← Stage 1
+  utils/        ← helpers
+\`\`\`
+`;
+
+describe('crossRef — mapped-file fallback', () => {
+  it('uses identity-mapped file for command check when agentsMd is null', () => {
+    const mappings: FileMapping[] = [
+      { path: 'CLAUDE.md', subsystems: ['identity', 'verification'] },
+    ];
+    const files = makeFiles({
+      mdFiles: [{ path: 'CLAUDE.md', name: 'CLAUDE.md', preview: '', fullContent: MAPPED_AGENTS_CONTENT }],
+      packageJson: { scripts: { build: 'tsc', test: 'vitest' } },
+    });
+    const result = crossRef(files, mappings);
+    const commandChecks = result.checks.filter((c) => c.name === 'commands-in-agents-exist-in-package');
+    expect(commandChecks.every((c) => c.passed)).toBe(true);
+  });
+
+  it('uses memory-mapped file for module check when architectureMd is null', () => {
+    const mappings: FileMapping[] = [
+      { path: 'docs/arch.md', subsystems: ['memory'] },
+    ];
+    const files = makeFiles({
+      mdFiles: [{ path: 'docs/arch.md', name: 'arch.md', preview: '', fullContent: MAPPED_ARCH_CONTENT }],
+      srcDirs: ['audit', 'utils'],
+    });
+    const result = crossRef(files, mappings);
+    const check = result.checks.find((c) => c.name === 'architecture-modules-match-src');
+    expect(check?.passed).toBe(true);
+  });
+
+  it('reports failure when mapped memory file references missing module', () => {
+    const mappings: FileMapping[] = [
+      { path: 'docs/arch.md', subsystems: ['memory'] },
+    ];
+    const files = makeFiles({
+      mdFiles: [{ path: 'docs/arch.md', name: 'arch.md', preview: '', fullContent: MAPPED_ARCH_CONTENT }],
+      srcDirs: ['audit'], // utils missing
+    });
+    const result = crossRef(files, mappings);
+    const check = result.checks.find((c) => c.name === 'architecture-modules-match-src');
+    expect(check?.passed).toBe(false);
+    expect(check?.detail).toContain('utils');
+  });
+
+  it('prefers agentsMd over mapped files when both present', () => {
+    const mappings: FileMapping[] = [
+      { path: 'CLAUDE.md', subsystems: ['identity'] },
+    ];
+    const files = makeFiles({
+      agentsMd: '# AGENTS.md\n```bash\nnpm run build\n```',
+      mdFiles: [{ path: 'CLAUDE.md', name: 'CLAUDE.md', preview: '', fullContent: '```bash\nnpm run missing-script\n```' }],
+      packageJson: { scripts: { build: 'tsc' } },
+    });
+    const result = crossRef(files, mappings);
+    // agentsMd wins — should only see 'build' command (not 'missing-script')
+    const commandChecks = result.checks.filter((c) => c.name === 'commands-in-agents-exist-in-package');
+    expect(commandChecks.every((c) => c.passed)).toBe(true);
   });
 });

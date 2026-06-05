@@ -135,7 +135,7 @@ export async function scoreRepo(
     (identity.score + verification.score + state.score + memory.score + constraints.score) / 5,
   );
 
-  const xref = crossRef(files);
+  const xref = crossRef(files, mappings);
 
   return { identity, verification, state, memory, constraints, overall, crossRef: xref };
 }

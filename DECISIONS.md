@@ -122,3 +122,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: tiktoken for exact counts — adds dependency and bundle size for logging-only use. Single-call with smaller previews only — loses classification accuracy on structure-heavy docs.
 - **Constraints introduced**: `estimateTokens()` lives in `tokens.ts` (chars/4 heuristic). Token counter is session-scoped per provider instance. JSON audit output includes `token_usage` field.
 - **Revisit when**: Provider APIs expose exact usage metadata worth switching from estimates, or triage accuracy proves insufficient on real repos.
+
+---
+
+### 2026-06-05: Graphify integration, filename-only triage, mapped-file cross-reference
+
+- **Decision**: (1) When `graphify-out/graph.json` or a dated subdirectory (`graphify-out/YYYY-MM-DD/graph.json`) exists in the target repo, use the Graphify knowledge graph to rank markdown files by degree centrality and skip triage entirely — the top 10 files go straight to classification. (2) When no Graphify output exists, the triage call now sends filenames only (no content previews) rather than 5-line previews — a ~10× token reduction on the triage step. (3) `crossRef()` now accepts `FileMapping[]` and falls back to mapped identity/verification files (for command checks) and mapped memory files (for module checks) when no canonical `AGENTS.md` / `ARCHITECTURE.md` was found by the loader — eliminating false "No AGENTS.md" failures when `CLAUDE.md` or a custom file was correctly mapped.
+- **Reason**: TPM pressure on large repos; filename-only triage is sufficient for the binary relevant/not-relevant decision. Graphify users already have centrality rankings — reusing them saves two LLM calls entirely. Hardcoded-filename cross-ref was the last place that penalised non-standard repo layouts.
+- **Rejected alternatives**: Keep 5-line previews for triage — marginally more context but 5-10× more tokens for a filter step. Read graph node labels for filenames — source_file is more reliable than label.
+- **Constraints introduced**: `loadRepo()` is still synchronous (uses `readFileSync` / `existsSync`). Graphify path checked at load time — no hot-reload. `mapFiles()` third param `usedGraphify` defaults to `false` so all existing callers remain compatible. `crossRef()` second param `mappings` defaults to `[]`.
+- **Revisit when**: Graphify schema changes (different node fields), or if degree centrality proves a poor proxy for harness relevance on a real corpus.

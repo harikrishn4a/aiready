@@ -264,6 +264,30 @@
       ],
       "agent_notes": "mapper.ts: triageFiles() then classifyFiles(). tokens.ts: estimateTokens(). LLMProvider.getTotalTokens() on all providers. index.ts logs Tokens used after report; reporter JSON includes token_usage.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-010",
+      "priority": 10,
+      "area": "audit",
+      "title": "Graphify integration, filename-only triage, mapped-file cross-reference",
+      "user_visible_behavior": "When graphify-out/graph.json exists, files are ranked by centrality and triage is skipped; otherwise triage sends filenames only (no previews); cross-ref checks use LLM-mapped files as fallback when canonical AGENTS.md/ARCHITECTURE.md not found",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 33.13 KB, zero errors",
+        "npm test: 142/142 (10 test files: tokens 3, mapper 9, cross-ref 18, reporter 17, scorer 11, llm 28, loader 28, prompt 12, cli 2, integration 14)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "DECISIONS.md: new entry dated 2026-06-05 (Graphify + filename triage + cross-ref fix)"
+      ],
+      "agent_notes": "loader.ts: findGraphifyOutput() checks direct and dated-subdir paths; loadFromGraph() computes degree centrality from edges. mapper.ts: triageByFilename() sends paths-only; mapFiles(mdFiles, provider, usedGraphify=false). cross-ref.ts: checkCommands/checkModules fall back to mapped identity/verification/memory files when canonical files absent. scorer.ts passes mappings to crossRef().",
+      "last_updated": "2026-06-05"
     }
   ]
 }
