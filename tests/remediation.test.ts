@@ -54,6 +54,38 @@ describe('buildRemediationPlan', () => {
     expect(plan.improve[0]?.template_section).toContain('examples/agents.md');
   });
 
+  it('treats constraints in CLAUDE.md as weak instead of missing', () => {
+    const plan = buildRemediationPlan(
+      scored({ constraints: sub(45, ['CLAUDE.md'], ['constraints are present but not structured']) }),
+      '/repo',
+    );
+    expect(plan.generate.map((item) => item.subsystem)).not.toContain('constraints');
+    expect(plan.improve[0]).toMatchObject({
+      filename: 'CLAUDE.md',
+      subsystem: 'constraints',
+      missing: 'constraints are present but not structured',
+    });
+  });
+
+  it.each([
+    ['identity' as const, 'README.md', 'identity details are present but not structured'],
+    ['verification' as const, 'PLAN.md', 'commands are present but not structured'],
+    ['state' as const, 'CHECKPOINT.md', 'state is present but not structured'],
+    ['memory' as const, 'DESIGN.md', 'architecture details are present but not structured'],
+    ['constraints' as const, 'CLAUDE.md', 'constraints are present but not structured'],
+  ])('treats misplaced %s content as weak instead of missing', (subsystem, filename, gap) => {
+    const plan = buildRemediationPlan(
+      scored({ [subsystem]: sub(45, [filename], [gap]) }),
+      '/repo',
+    );
+    expect(plan.generate.map((item) => item.subsystem)).not.toContain(subsystem);
+    expect(plan.improve[0]).toMatchObject({
+      filename,
+      subsystem,
+      missing: gap,
+    });
+  });
+
   it('adds source context for weak non-canonical files', () => {
     const plan = buildRemediationPlan(
       scored({ state: sub(35, ['FEATURE_PLAN.md'], ['no current status']) }),

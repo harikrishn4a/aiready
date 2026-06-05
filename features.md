@@ -174,8 +174,8 @@ Audit output is shorter and more actionable. It writes `.aiready/plan.md` as a d
 
 **Tasks:**
 - [x] `loader.ts` — always include root harness filenames, semantic Graphify node-label matching, dedupe, 6000-char content cap
-- [x] `mapper.ts` — align with 5-line triage previews and 50-line classification previews
-- [x] `scorer.ts` — strict course-aligned scoring criteria and findings shape
+- [x] `mapper.ts` — align with 5-line triage previews and 50-line classification previews; preserve full-content signals for all five subsystems
+- [x] `scorer.ts` — strict course-aligned scoring criteria and findings shape; score subsystem content as files or sections
 - [x] `remediation.ts` — typed generate/improve/source_context contract with `examples/` template references and `max_lines: 300`
 - [x] `reporter.ts` / `index.ts` — readable multi-line CLI summary, JSON remediation, `.aiready/plan.md`, opt-in `--min-score` failure
 - [x] `spinner.ts` — sea-green TTY-only loading spinner disabled for JSON/CI

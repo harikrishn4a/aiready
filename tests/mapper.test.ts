@@ -42,6 +42,49 @@ describe('mapFiles — basic behaviour', () => {
     expect(provider.chat).toHaveBeenCalledTimes(2);
   });
 
+  it('adds constraints mapping when full content contains hard constraint language', async () => {
+    const provider = makeProvider(
+      JSON.stringify({ relevant: ['CLAUDE.md'] }),
+      JSON.stringify({
+        mappings: [{ path: 'CLAUDE.md', subsystems: ['identity'] }],
+      }),
+    );
+    const content = [
+      '# CLAUDE.md',
+      'Project overview and setup notes.',
+      '',
+      '## Key constraint',
+      'The corroboration endpoint MUST NOT modify the existing analysis pipeline.',
+    ].join('\n');
+
+    const result = await mapFiles([makeFile('CLAUDE.md', content)], provider);
+
+    expect(result[0]?.path).toBe('CLAUDE.md');
+    expect(result[0]?.subsystems).toContain('identity');
+    expect(result[0]?.subsystems).toContain('constraints');
+  });
+
+  it('maps full-content signals for all subsystems even when triage misses them', async () => {
+    const provider = makeProvider(JSON.stringify({ relevant: [] }));
+    const files = [
+      makeFile('README.md', '## Project overview\nTech stack: Node.js\nRepository structure: src/ and tests/.'),
+      makeFile('PLAN.md', '## Verification\nRun npm run build and npm run test before marking work done.'),
+      makeFile('CHECKPOINT.md', '## Current state\nCompleted backend work. Blocked on UI review. Next step: test.'),
+      makeFile('DESIGN.md', '## Module map\nKey files: src/cli.ts. Data flow: CLI to audit pipeline.'),
+      makeFile('CLAUDE.md', '## Key constraints\nMUST NOT modify user files without confirmation.'),
+    ];
+
+    const result = await mapFiles(files, provider);
+    const byPath = new Map(result.map((mapping) => [mapping.path, mapping.subsystems]));
+
+    expect(byPath.get('README.md')).toContain('identity');
+    expect(byPath.get('PLAN.md')).toContain('verification');
+    expect(byPath.get('CHECKPOINT.md')).toContain('state');
+    expect(byPath.get('DESIGN.md')).toContain('memory');
+    expect(byPath.get('CLAUDE.md')).toContain('constraints');
+    expect(provider.chat).toHaveBeenCalledTimes(1);
+  });
+
   it('calls provider.chat with fast: true on both stages', async () => {
     const provider = makeProvider(
       JSON.stringify({ relevant: ['README.md'] }),

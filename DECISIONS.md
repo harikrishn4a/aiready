@@ -152,3 +152,23 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Keep the default score threshold at 70 — useful for CI but surprising for local discovery. Keep one-line bar output — compact but hard to scan once explanations wrap.
 - **Constraints introduced**: Normal audit runs should not call `process.exit(1)` solely because the score is low. Future `init` code should treat `source_context` as read-only input and must not delete, rename, or overwrite those files automatically.
 - **Revisit when**: Stage 2 `init` consumes `.aiready/plan.md` and needs additional machine-readable fields.
+
+---
+
+### 2026-06-05: Constraints can be recognized as sections
+
+- **Decision**: The mapper now adds a constraints subsystem mapping when full file content contains hard constraint language such as `MUST NOT`, even if the LLM classifier did not map that file to constraints. The scorer prompt treats constraints as a file or section, not only as a dedicated `CONSTRAINTS.md`.
+- **Reason**: A repo can have real constraints inside `CLAUDE.md`, `AGENTS.md`, or another agent entry point. That should score as weak or partially structured constraints, not as missing constraints.
+- **Rejected alternatives**: Require a dedicated `CONSTRAINTS.md` before giving any score — too brittle and contradicts content-aware auditing. Trust the LLM classifier alone — it can miss late-file sections because classification uses previews.
+- **Constraints introduced**: Dedicated constraints structure can still score higher, but hard constraints embedded in another harness file must not produce a missing-file remediation item.
+- **Revisit when**: The mapper gains chunked classification or section-level extraction.
+
+---
+
+### 2026-06-05: All subsystems can be recognized as misplaced sections
+
+- **Decision**: The mapper now applies deterministic full-content signal detection for identity, verification, state, memory, and constraints after LLM mapping. The scorer prompt tells the model to score subsystem content found in the wrong file or section and warn that it should be structured into the expected artifact.
+- **Reason**: Stage 1 should audit what is actually present, not only what is present in ideal filenames. Misplaced subsystem content should become an `improve` recommendation, not a false `generate` recommendation.
+- **Rejected alternatives**: Keep deterministic fallback only for constraints — that leaves the same false-missing bug for verification commands, progress notes, architecture notes, and identity content. Depend only on preview-based LLM mapping — later sections can be missed.
+- **Constraints introduced**: Signal detection should stay conservative and should not make generic docs score highly. Quality and structure remain the scorer's job.
+- **Revisit when**: The mapper supports section-level extraction with source spans.

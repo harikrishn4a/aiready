@@ -304,13 +304,13 @@
         "npm run lint"
       ],
       "evidence": [
-        "npm run build: dist/cli.js 48.99 KB, zero errors",
+        "npm run build: dist/cli.js 52.42 KB, zero errors",
         "npm run typecheck: zero errors",
         "npm run lint: clean",
-        "npm test: 153/153 (12 test files: remediation 5, spinner 2, loader 29, reporter 19, cli 3, mapper 9, scorer 11, etc.)",
+        "npm test: 162/162 (12 test files: remediation 11, spinner 2, loader 29, reporter 19, cli 3, mapper 11, scorer 12, etc.)",
         "Manual live smoke tests not run: ANTHROPIC_API_KEY and OPENAI_API_KEY were not present in shell"
       ],
-      "agent_notes": "loader.ts now guarantees canonical harness files, matches Graphify node labels against SUBSYSTEM_CONCEPTS, dedupes, and caps content at 6000 chars. scorer.ts uses strict course-aligned criteria and findings. remediation.ts builds generate/improve/source_context with examples/* template refs and max_lines=300. reporter/index write .aiready/plan.md, include remediation in JSON, and render multi-line subsystem blocks. --min-score is CI opt-in; normal audit runs exit 0 even when the score is low. spinner.ts is TTY-only and disabled for JSON/CI.",
+      "agent_notes": "loader.ts now guarantees canonical harness files, matches Graphify node labels against SUBSYSTEM_CONCEPTS, dedupes, and caps content at 6000 chars. mapper.ts now adds deterministic full-content signal mapping for all five subsystems, so misplaced identity, verification, state, memory, or constraints sections are not treated as missing when triage/classification previews miss them. scorer.ts uses strict course-aligned criteria and findings, and allows subsystem content to be scored as files or sections. remediation.ts builds generate/improve/source_context with examples/* template refs and max_lines=300. reporter/index write .aiready/plan.md, include remediation in JSON, and render multi-line subsystem blocks. --min-score is CI opt-in; normal audit runs exit 0 even when the score is low. spinner.ts is TTY-only and disabled for JSON/CI.",
       "last_updated": "2026-06-05"
     }
   ]

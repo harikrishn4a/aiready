@@ -1,8 +1,8 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 48.99 KB (full pipeline bundled)
-- Tests: 153/153 passing (12 test files)
+- Build: passing — dist/cli.js 52.42 KB (full pipeline bundled)
+- Tests: 162/162 passing (12 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05

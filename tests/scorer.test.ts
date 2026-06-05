@@ -134,6 +134,16 @@ describe('scoreRepo — provider interaction', () => {
     );
   });
 
+  it('allows constraints sections inside agent entry files', async () => {
+    const provider = makeProvider(allZeroScores());
+    await scoreRepo(makeFiles(), [], provider);
+    const systemPrompt = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
+    expect(systemPrompt).toContain('If a subsystem\'s content exists inside the wrong file');
+    expect(systemPrompt).toContain('assign partial credit and warn');
+    expect(systemPrompt).toContain('file or section documents hard limits');
+    expect(systemPrompt).toContain('Do not return 0 only because the constraints are not in CONSTRAINTS.md');
+  });
+
   it('returns 0 scores when provider returns invalid JSON', async () => {
     const provider: LLMProvider = {
       chat: vi.fn().mockResolvedValue('sorry, cannot help'),

@@ -4,20 +4,20 @@
 2026-06-05
 
 ## What was completed
-- **feat-011 complete** — Graphify semantic query, strict scoring, agent remediation plan, readable CLI output, opt-in score failure, and sea-green spinner
+- **feat-011 complete** — Graphify semantic query, strict scoring, content-aware subsystem mapping, agent remediation plan, readable CLI output, opt-in score failure, and sea-green spinner
 
 ### feat-011 changes
 
 #### New files
 - `src/audit/remediation.ts` — typed remediation contract (`generate`, `improve`, `source_context`), examples template references, `max_lines: 300`, markdown renderer, `.aiready/plan.md` writer
 - `src/utils/spinner.ts` — Claude-style sea-green TTY-only spinner disabled for JSON/CI
-- `tests/remediation.test.ts` — 5 tests
+- `tests/remediation.test.ts` — 11 tests
 - `tests/spinner.test.ts` — 2 tests
 
 #### Modified files
 - `src/audit/loader.ts` — guaranteed harness filenames, semantic Graphify node-label matching via `SUBSYSTEM_CONCEPTS`, dedupe, `MAX_CONTENT_CHARS = 6000`, metadata (`graphifyPath`, `guaranteedFiles`, `conceptMatchedFiles`)
-- `src/audit/mapper.ts` — 5-line preview triage restored, 50-line preview classification retained; Graphify-selected files skip triage
-- `src/audit/scorer.ts` — strict course-aligned scoring prompt; `findings` shape added while preserving `gaps`
+- `src/audit/mapper.ts` — 5-line preview triage restored, 50-line preview classification retained; Graphify-selected files skip triage; full-content signals add mappings for all five subsystems
+- `src/audit/scorer.ts` — strict course-aligned scoring prompt; `findings` shape added while preserving `gaps`; subsystem content can be scored as files or sections
 - `src/audit/reporter.ts` — readable multi-line terminal output; JSON includes `remediation` and optional `plan_path`
 - `src/audit/index.ts` — builds remediation plan, writes `.aiready/plan.md`, wraps LLM phases in spinner, exits nonzero only when `--min-score` is provided and failed
 - `TASK.md`, `PROGRESS.md`, `features.md`, `feature_list.json`, `DECISIONS.md` — updated for feat-011
@@ -25,10 +25,10 @@
 ## Verification run
 | Command | Result |
 |---|---|
-| `npm run build` | pass — dist/cli.js 48.99 KB, zero errors |
+| `npm run build` | pass — dist/cli.js 52.42 KB, zero errors |
 | `npm run typecheck` | pass — zero errors |
 | `npm run lint` | pass — clean |
-| `npm test` | pass — 153/153 (12 test files) |
+| `npm test` | pass — 162/162 (12 test files) |
 
 ## What is broken or unverified
 - Manual live smoke tests were not run because neither `ANTHROPIC_API_KEY` nor `OPENAI_API_KEY` was present in the shell.

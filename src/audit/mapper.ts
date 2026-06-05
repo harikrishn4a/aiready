@@ -85,6 +85,71 @@ function parseMapperResponse(text: string): FileMapping[] {
   }
 }
 
+const SUBSYSTEM_SIGNAL_PATTERNS: Record<Subsystem, RegExp[]> = {
+  identity: [
+    /(^|\n)\s*#{1,6}\s*(project\s+overview|project\s+purpose|what\s+this\s+is|what\s+this\s+project\s+does)\b/i,
+    /\btech\s+stack\b/i,
+    /\bstack\s+with\s+versions?\b/i,
+    /\brepo(sitory)?\s+structure\b/i,
+    /\bagent\s+(entry\s+point|instructions?)\b/i,
+  ],
+  verification: [
+    /(^|\n)\s*#{1,6}\s*(verification|verification\s+commands|definition\s+of\s+done|test\s+plan)\b/i,
+    /\bnpm\s+run\s+(build|test|lint|typecheck)\b/,
+    /\b(pnpm|yarn|bun)\s+(build|test|lint|typecheck)\b/,
+    /\b(pytest|cargo\s+test|go\s+test|make\s+(test|check|verify))\b/,
+  ],
+  state: [
+    /(^|\n)\s*#{1,6}\s*(current\s+state|current\s+status|progress|session\s+handoff|handoff|verification\s+run)\b/i,
+    /\b(completed|in\s+progress|blocked|next\s+(best\s+)?step|last\s+verified)\b/i,
+  ],
+  memory: [
+    /(^|\n)\s*#{1,6}\s*(architecture|module\s+map|structure|data\s+flow|key\s+files)\b/i,
+    /\b(module\s+responsibilit(y|ies)|codebase\s+structure|dependency\s+relationships?|file\s+map)\b/i,
+  ],
+  constraints: [
+    /(^|\n)\s*#{1,6}\s*(key\s+)?constraints?\b/i,
+    /\bMUST\s+NOT\b/,
+    /\bMUST\b/,
+    /\bmust\s+not\b/i,
+    /\bdo\s+not\b/i,
+    /\bnever\b/i,
+    /\bforbidden\b/i,
+  ],
+};
+
+function detectSubsystemSignals(content: string): Subsystem[] {
+  return Object.entries(SUBSYSTEM_SIGNAL_PATTERNS)
+    .filter(([, patterns]) => patterns.some((pattern) => pattern.test(content)))
+    .map(([subsystem]) => subsystem as Subsystem);
+}
+
+function addSubsystem(mapping: FileMapping, subsystem: Subsystem): FileMapping {
+  if (mapping.subsystems.includes(subsystem)) return mapping;
+  return { ...mapping, subsystems: [...mapping.subsystems, subsystem] };
+}
+
+function augmentMappingsWithContentSignals(files: RepoFile[], mappings: FileMapping[]): FileMapping[] {
+  const byPath = new Map(mappings.map((mapping) => [mapping.path, mapping]));
+
+  for (const file of files) {
+    const subsystems = detectSubsystemSignals(file.fullContent);
+    if (subsystems.length === 0) continue;
+
+    const existing = byPath.get(file.path);
+    if (existing) {
+      byPath.set(
+        file.path,
+        subsystems.reduce((mapping, subsystem) => addSubsystem(mapping, subsystem), existing),
+      );
+    } else {
+      byPath.set(file.path, { path: file.path, subsystems });
+    }
+  }
+
+  return [...byPath.values()];
+}
+
 async function triageFiles(mdFiles: RepoFile[], provider: LLMProvider): Promise<string[]> {
   const fileList = mdFiles
     .map((f) => `- path: ${f.path}\n  preview: ${JSON.stringify(firstLines(f.fullContent, 5))}`)
@@ -123,15 +188,15 @@ export async function mapFiles(
 
   // Graphify already selected a semantic subset — skip triage
   if (usedGraphify) {
-    return classifyFiles(mdFiles, provider);
+    return augmentMappingsWithContentSignals(mdFiles, await classifyFiles(mdFiles, provider));
   }
 
   const relevantPaths = await triageFiles(mdFiles, provider);
-  if (relevantPaths.length === 0) return [];
+  if (relevantPaths.length === 0) return augmentMappingsWithContentSignals(mdFiles, []);
 
   const pathSet = new Set(relevantPaths);
   const relevantFiles = mdFiles.filter((f) => pathSet.has(f.path));
-  if (relevantFiles.length === 0) return [];
+  if (relevantFiles.length === 0) return augmentMappingsWithContentSignals(mdFiles, []);
 
-  return classifyFiles(relevantFiles, provider);
+  return augmentMappingsWithContentSignals(mdFiles, await classifyFiles(relevantFiles, provider));
 }
