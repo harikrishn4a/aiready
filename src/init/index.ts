@@ -1,21 +1,83 @@
 import { resolve, join } from 'path';
 import { existsSync } from 'fs';
+import { confirm } from '@inquirer/prompts';
 import { runAudit } from '../audit/index.js';
 import { selectAuditConfig } from '../utils/prompt.js';
 import { createProvider } from '../utils/llm.js';
-import { parsePlan } from './parser.js';
-import { executeGenerate, executeImprove } from './executor.js';
-import { getAuditScore } from './scorer.js';
-import type { InitFlags } from './executor.js';
+import { buildInitPlan } from './planner.js';
+import { executeGenerate, executeImprove, type InitFlags } from './executor.js';
+import { getAuditScoreDetailed } from './scorer.js';
+import { consolidateEntryPoints } from './consolidator.js';
+import type { ArtifactPlan } from './planner.js';
 
 export type { InitFlags };
 
-function printScoreDelta(before: number, after: number): void {
+function isForced(flags: InitFlags, filename: string): boolean {
+  if (flags.force === true) return true;
+  if (typeof flags.force === 'string') return flags.force === filename;
+  return false;
+}
+
+function printPlanPreview(artifacts: ArtifactPlan[]): void {
+  const generate = artifacts.filter((a) => a.action === 'generate');
+  const improve  = artifacts.filter((a) => a.action === 'improve');
+  const skip     = artifacts.filter((a) => a.action === 'skip');
+
+  const padFile = (s: string) => s.padEnd(22);
+  const padSub  = (s: string | null) => (s ?? '—').padEnd(14);
+
+  if (generate.length > 0) {
+    console.log(`\n  GENERATE (${generate.length}):`);
+    for (const a of generate) {
+      const sources = a.sourceFiles.length > 0 ? `sources: ${a.sourceFiles.slice(0, 3).join(', ')}` : '';
+      console.log(`    ${padFile(a.filename)} ${padSub(a.subsystem)} ${sources}`);
+    }
+  }
+
+  if (improve.length > 0) {
+    console.log(`\n  IMPROVE (${improve.length}):`);
+    for (const a of improve) {
+      console.log(`    ${padFile(a.filename)} ${padSub(a.subsystem)} ${a.reason}`);
+    }
+  }
+
+  if (skip.length > 0) {
+    console.log(`\n  SKIP (${skip.length}):`);
+    for (const a of skip) {
+      console.log(`    ${padFile(a.filename)} ${a.reason}`);
+    }
+  }
+}
+
+function printScoreDelta(
+  before: number,
+  after: number,
+  beforeSubs: Record<string, number>,
+  afterSubs: Record<string, number>,
+  artifacts: ArtifactPlan[],
+): void {
   const delta = after - before;
   const sign = delta >= 0 ? '+' : '';
   const sep = '─'.repeat(52);
   console.log(`\n${sep}`);
   console.log(`AI Readiness: ${before}/100 → ${after}/100  (${sign}${delta})`);
+  console.log('');
+
+  const subsystems = ['identity', 'verification', 'state', 'memory', 'constraints'];
+  for (const sub of subsystems) {
+    const b = beforeSubs[sub] ?? 0;
+    const a = afterSubs[sub] ?? 0;
+    const d = a - b;
+    const sign2 = d > 0 ? '+' : d < 0 ? '' : ' ';
+    // Find artifacts that affect this subsystem
+    const changed = artifacts
+      .filter((art) => art.subsystem === sub && art.action !== 'skip')
+      .map((art) => art.filename)
+      .join(', ');
+    const note = changed ? `  ${changed}` : d === 0 ? '  unchanged' : '';
+    console.log(`  ${sub.padEnd(14)} ${String(b).padStart(3)} → ${String(a).padEnd(3)}  ${sign2}${Math.abs(d)}${note}`);
+  }
+
   if (delta > 0) {
     console.log('\nRun `npx aiready audit` for the full updated report.');
   } else if (delta === 0) {
@@ -39,61 +101,90 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
     }
   }
 
-  const plan = await parsePlan(planPath);
-  if (!plan) {
-    console.error('Could not parse .aiready/plan.md. Run `npx aiready audit` first.');
+  let plan;
+  try {
+    plan = await buildInitPlan(planPath, targetDir);
+  } catch (err) {
+    console.error(`Could not parse .aiready/plan.md: ${(err as Error).message}`);
+    console.error('Run `npx aiready audit` first.');
     process.exit(1);
     return;
   }
 
-  const total = plan.generate.length + plan.improve.length;
+  const actionableArtifacts = plan.artifacts.filter((a) => a.action !== 'skip' || isForced(flags, a.filename));
+  const activeArtifacts = actionableArtifacts.filter((a) => {
+    if (a.action === 'skip' && isForced(flags, a.filename)) return true;
+    return a.action !== 'skip';
+  });
 
-  if (total === 0) {
+  if (flags.dryRun) {
+    console.log('\nAIReady — Init (DRY RUN)\n');
+    console.log(`Reading ${planPath}...\n`);
+    console.log(`Planned actions (${plan.artifacts.length} artifacts):`);
+    printPlanPreview(plan.artifacts);
+    console.log('\nRun without --dry-run to execute.');
+    return;
+  }
+
+  const total = plan.artifacts.length;
+  const actionCount = activeArtifacts.length;
+
+  if (actionCount === 0) {
     console.log('Nothing to do — repository harness appears complete.');
     console.log('Run `npx aiready drift` to check for stale content.');
     return;
   }
 
-  if (flags.dryRun) {
-    console.log('\nDRY RUN — no files will be written\n');
-    for (let i = 0; i < plan.generate.length; i++) {
-      const item = plan.generate[i];
-      console.log(`[${i + 1}/${total}] Would generate: ${item.filename}`);
-      if (item.sourceFiles.length > 0) {
-        console.log(`      Source: ${item.sourceFiles.join(', ')}`);
-      }
-      console.log(`      Template: ${item.templateFile}`);
-      console.log('');
-    }
-    for (let i = 0; i < plan.improve.length; i++) {
-      const item = plan.improve[i];
-      const step = plan.generate.length + i + 1;
-      console.log(`[${step}/${total}] Would improve: ${item.filename} → ${item.section}`);
-      console.log(`      Fix: ${item.fix}`);
-      console.log('');
-    }
-    console.log('Run without --dry-run to execute.');
-    return;
-  }
+  console.log('\nAIReady — Init\n');
+  console.log(`Reading ${planPath}...\n`);
+  console.log(`Planned actions (${total} artifacts):`);
+  printPlanPreview(plan.artifacts);
+  console.log('');
 
-  console.log(`\nFound ${plan.generate.length} artifacts to generate, ${plan.improve.length} to improve.\n`);
+  // Confirmation (skip if --yes)
+  if (!flags.yes) {
+    const proceed = await confirm({ message: `Proceed with ${actionCount} action${actionCount === 1 ? '' : 's'}?`, default: true });
+    if (!proceed) {
+      console.log('Aborted.');
+      return;
+    }
+  }
 
   const config = await selectAuditConfig({ provider: flags.provider, model: flags.model });
   const provider = createProvider(config.provider, config.apiKey, config.modelId);
-  const scoreBefore = plan.overall;
 
-  for (let i = 0; i < plan.generate.length; i++) {
-    await executeGenerate(plan.generate[i], targetDir, flags, i + 1, total, provider);
+  // Capture before scores from plan
+  const beforeSubs: Record<string, number> = {};
+  for (const a of plan.artifacts) {
+    if (a.subsystem && a.currentScore !== null) {
+      beforeSubs[a.subsystem] = Math.max(beforeSubs[a.subsystem] ?? 0, a.currentScore);
+    }
   }
 
-  for (let i = 0; i < plan.improve.length; i++) {
-    const step = plan.generate.length + i + 1;
-    await executeImprove(plan.improve[i], targetDir, flags, step, total, provider);
+  let step = 0;
+  for (const artifact of plan.artifacts) {
+    const forced = isForced(flags, artifact.filename);
+    if (artifact.action === 'skip' && !forced) continue;
+
+    step++;
+    const action = forced && artifact.action === 'skip' ? 'generate' : artifact.action;
+
+    if (action === 'generate') {
+      await executeGenerate(artifact, targetDir, flags, step, actionCount, provider);
+    } else if (action === 'improve') {
+      await executeImprove(artifact, targetDir, flags, step, actionCount, provider);
+    }
   }
+
+  // Consolidate entry points (CLAUDE.md etc. → AGENTS.md shims)
+  await consolidateEntryPoints(targetDir, provider);
 
   console.log('\nRe-scoring repository...');
-  const scoreAfter = await getAuditScore(targetDir, provider);
-  printScoreDelta(scoreBefore, scoreAfter);
+  const scoreAfterResult = await getAuditScoreDetailed(targetDir, provider);
+  const scoreBefore = plan.overall;
+  const scoreAfter = scoreAfterResult.overall;
+
+  printScoreDelta(scoreBefore, scoreAfter, beforeSubs, scoreAfterResult.subsystems, plan.artifacts);
 
   const totalTokens = provider.getTotalTokens();
   const display = totalTokens >= 1000 ? `~${Math.ceil(totalTokens / 1000)}k` : `~${totalTokens}`;

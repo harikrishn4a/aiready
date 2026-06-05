@@ -1,20 +1,27 @@
 import { readFileSync, existsSync } from 'fs';
+import { readFile } from 'fs/promises';
 import { resolve, join } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
-import type { GenerateItem } from './parser.js';
+import type { ArtifactPlan } from './planner.js';
 
 const PACKAGE_ROOT = resolve(__dirname, '..');
 
-const SYSTEM_PROMPT = `You are generating a harness artifact for an AI coding agent.
-This file will be read by agents in future sessions to guide their work.
+const SYSTEM_PROMPT = `You are consolidating information from a messy repository into a
+clean, canonical harness artifact for AI coding agents.
 
-Rules:
-- Follow the template structure exactly
-- Replace all {{PLACEHOLDER}} sections with real content from sources
-- Never output placeholder text
-- Keep output under 300 lines
-- Be specific — use real names, real commands, real module names from sources
-- Output the file content only, no explanation, no markdown fences`;
+CRITICAL RULES:
+- Follow the template structure EXACTLY — same sections, same headings
+- Replace every {{PLACEHOLDER}} with real content extracted from sources
+- Never leave placeholder text in output
+- Never add sections not in the template
+- Never remove sections from the template
+- If information for a section is not found in sources, write "Not yet documented" rather than leaving it blank or inventing content
+- Output the file content ONLY — no explanation, no markdown fences
+- Keep output under 300 lines unless template requires more`;
+
+const BLANK_TEMPLATE_FILES = new Set([
+  'TASK.md', 'features.md', 'feature_list.json', 'QUALITY.md',
+]);
 
 function readCapped(filePath: string, cap = 4000): string | null {
   if (!existsSync(filePath)) return null;
@@ -33,29 +40,76 @@ function loadTemplate(templateFile: string): string {
   return '';
 }
 
+async function detectTechStack(target: string): Promise<string> {
+  const facts: string[] = [];
+
+  const pkgPath = join(target, 'package.json');
+  if (existsSync(pkgPath)) {
+    try {
+      const pkg = JSON.parse(await readFile(pkgPath, 'utf-8'));
+      facts.push('Package manager: npm/node');
+      const scripts = Object.keys(pkg.scripts ?? {});
+      if (scripts.length > 0) facts.push(`Scripts: ${scripts.join(', ')}`);
+      const deps = Object.keys(pkg.dependencies ?? {}).slice(0, 10);
+      if (deps.length > 0) facts.push(`Dependencies: ${deps.join(', ')}`);
+    } catch {
+      facts.push('Package manager: npm/node');
+    }
+  }
+
+  if (existsSync(join(target, 'requirements.txt'))) {
+    facts.push('Python project');
+    const reqs = readCapped(join(target, 'requirements.txt'), 500);
+    if (reqs) facts.push(`Key packages: ${reqs.split('\n').slice(0, 5).join(', ')}`);
+  }
+
+  if (existsSync(join(target, 'pyproject.toml'))) facts.push('Uses pyproject.toml');
+  if (existsSync(join(target, 'go.mod'))) facts.push('Go project');
+  if (existsSync(join(target, 'Cargo.toml'))) facts.push('Rust project');
+  if (existsSync(join(target, 'docker-compose.yml'))) facts.push('Uses docker-compose');
+
+  return facts.join('\n');
+}
+
 export async function generateArtifact(
-  item: GenerateItem,
+  artifact: ArtifactPlan,
   target: string,
   provider: LLMProvider,
 ): Promise<string> {
-  const template = loadTemplate(item.templateFile);
+  // Blank templates: copy directly without LLM call
+  if (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename)) {
+    const template = loadTemplate(artifact.templateFile);
+    if (template) return template;
+  }
+
+  const template = loadTemplate(artifact.templateFile);
 
   const sourceParts: string[] = [];
-  const pkgPath = join(target, 'package.json');
-  const pkg = readCapped(pkgPath);
-  if (pkg) sourceParts.push(`### package.json\n${pkg}`);
+  // Always include package.json for context if it exists
+  const pkgContent = readCapped(join(target, 'package.json'));
+  if (pkgContent && !artifact.sourceFiles.includes('package.json')) {
+    sourceParts.push(`### package.json\n${pkgContent}`);
+  }
 
-  for (const sourceFile of item.sourceFiles) {
-    if (sourceFile === 'package.json') continue;
+  for (const sourceFile of artifact.sourceFiles) {
     const content = readCapped(join(target, sourceFile));
     if (content) sourceParts.push(`### ${sourceFile}\n${content}`);
   }
-  const sourceContext = sourceParts.join('\n\n');
 
-  const userParts = [`Generate ${item.filename} for this repository.\n`];
-  if (item.required) userParts.push(`Required sections:\n${item.required}\n`);
-  if (template) userParts.push(`Template:\n${template}\n`);
-  if (sourceContext) userParts.push(`Source context:\n${sourceContext}`);
+  const techStackSummary = await detectTechStack(target);
+
+  const userParts = [
+    `Generate ${artifact.filename} for this repository.\n`,
+    `This file must strictly follow this template:\n=== TEMPLATE START ===\n${template}\n=== TEMPLATE END ===\n`,
+  ];
+
+  if (sourceParts.length > 0) {
+    userParts.push(`Extract relevant information from these source files to fill in each section of the template:\n\n${sourceParts.join('\n\n')}\n`);
+  }
+
+  if (techStackSummary) {
+    userParts.push(`Tech stack context (use for Makefile, init.sh, verify.sh):\n${techStackSummary}`);
+  }
 
   return provider.chat(SYSTEM_PROMPT, userParts.join('\n'), { fast: false });
 }

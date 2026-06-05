@@ -1,31 +1,43 @@
-# TASK.md — feat-013: Fix init pipeline (parser, reporter format, generator, improver)
+# TASK.md — feat-014: Stage 2 init — full canonical structure generation
 
 ## Feature ID
-feat-013
+feat-014
 
-## Bugs being fixed
-1. plan.md treated as an IMPROVE target — must never appear in generate/improve lists
-2. parser.ts reads old `## Missing Artifacts` format — plan.md now writes `## GENERATE`/`## IMPROVE`
-3. No new artifacts created — consequence of bugs 1+2
+## Scope — what will change
+- NEW `src/init/planner.ts` — replaces parser.ts; builds plan for ALL 13 canonical artifacts
+- UPDATED `src/init/generator.ts` — strict template prompt, tech stack detection, blank template copy
+- UPDATED `src/init/improver.ts` — accepts ArtifactPlan instead of ImproveItem
+- UPDATED `src/init/executor.ts` — accepts ArtifactPlan for both generate and improve
+- UPDATED `src/init/scorer.ts` — new getAuditScoreDetailed() returning per-subsystem scores
+- UPDATED `src/init/index.ts` — planner, plan preview, confirmation prompt, per-subsystem delta
+- NEW `src/init/consolidator.ts` — merge CLAUDE.md/.cursorrules etc. into AGENTS.md, write shims
+- UPDATED `src/audit/remediation.ts` — write SUBSYSTEM SCORES + SUBSYSTEM SOURCES to plan.md
+- UPDATED `src/cli.ts` — add --yes flag to init command
 
-## Design decisions
-- Non-canonical mapped file + score < 60 → GENERATE canonical artifact (not IMPROVE non-canonical)
-- plan.md / .aiready/plan.md always excluded from generate/improve at both build and parse time
-- `source_files` replaces `source_signals` — actual file paths only, no description strings
-- `parsePlan` is async (uses fs/promises)
-- LLM calls use `{ fast: false }` for quality output
+## Canonical artifact set (13 files)
+AGENTS.md, CONSTRAINTS.md, ARCHITECTURE.md, DECISIONS.md, PROGRESS.md, SESSION-HANDOFF.md,
+TASK.md, features.md, feature_list.json, QUALITY.md, Makefile, scripts/init.sh, scripts/verify.sh
+
+## Decision logic per artifact
+- Skip threshold: score >= 80 AND file exists → skip
+- Improve: score < 80 AND file exists → improve
+- Generate: file does not exist → generate
+- alwaysGenerate=true: never skip, always generate (blank template copy, no LLM)
 
 ## Modules (in order)
-1. Create fixture files
-2. Rewrite `src/init/parser.ts` — new format, async
-3. Update `src/audit/remediation.ts` — new format output, non-canonical logic
-4. Update `src/init/generator.ts` — sourceFiles, fast: false
-5. Update `src/init/improver.ts` — sourceFiles, fast: false
-6. Update `src/init/executor.ts` + `src/init/index.ts` — new types, await parsePlan
+1. Create fixture files and fixture repos
+2. Update remediation.ts — add SUBSYSTEM SCORES + SUBSYSTEM SOURCES sections
+3. Create planner.ts + tests
+4. Update generator.ts — strict prompt, tech stack detection, blank template copy
+5. Update improver.ts + executor.ts — ArtifactPlan type throughout
+6. Create consolidator.ts + tests
+7. Update scorer.ts — getAuditScoreDetailed()
+8. Update index.ts — full pipeline: planner, preview, confirm, execute, consolidate, score delta
+9. Update cli.ts — --yes flag
 
 ## Completion gate
 - npm run build — zero errors
 - npm run typecheck — zero errors
 - npm run lint — clean
-- npm test — all pass including new init/parser tests
-- node dist/cli.js init --target ./examples/bare-repo --dry-run — shows items
+- npm test — all pass including new planner + consolidator tests
+- node dist/cli.js init --target ./examples/bare-repo --dry-run — shows 13 artifacts

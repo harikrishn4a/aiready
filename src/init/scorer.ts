@@ -4,13 +4,31 @@ import { mapFiles } from '../audit/mapper.js';
 import { scoreRepo } from '../audit/scorer.js';
 import type { LLMProvider } from '../utils/llm.js';
 
-export async function getAuditScore(
+export interface AuditScoreResult {
+  overall: number;
+  subsystems: Record<string, number>;
+}
+
+export async function getAuditScoreDetailed(
   target: string,
   provider: LLMProvider,
-): Promise<number> {
+): Promise<AuditScoreResult> {
   const targetDir = resolve(target);
   const files = loadRepo(targetDir);
   const mappings = await mapFiles(files.mdFiles, provider, files.usedGraphify);
   const scored = await scoreRepo(files, mappings, provider);
-  return scored.overall;
+  return {
+    overall: scored.overall,
+    subsystems: {
+      identity: scored.identity.score,
+      verification: scored.verification.score,
+      state: scored.state.score,
+      memory: scored.memory.score,
+      constraints: scored.constraints.score,
+    },
+  };
+}
+
+export async function getAuditScore(target: string, provider: LLMProvider): Promise<number> {
+  return (await getAuditScoreDetailed(target, provider)).overall;
 }

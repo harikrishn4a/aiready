@@ -39,6 +39,8 @@ export interface RemediationPlan {
   generate: RemediationItem[];
   improve: ImproveItem[];
   source_context: ManualReviewItem[];
+  subsystemScores: Record<string, number>;
+  subsystemSources: Record<string, string[]>;
 }
 
 const MAX_LINES = 300;
@@ -165,9 +167,13 @@ export function buildRemediationPlan(scored: ScoredResult, target: string): Reme
   const generate: RemediationItem[] = [];
   const improve: ImproveItem[] = [];
   const source_context: ManualReviewItem[] = [];
+  const subsystemScores: Record<string, number> = {};
+  const subsystemSources: Record<string, string[]> = {};
 
   for (const subsystem of ['identity', 'verification', 'state', 'memory', 'constraints'] as const) {
     const data = scored[subsystem];
+    subsystemScores[subsystem] = data.score;
+    subsystemSources[subsystem] = data.files.filter((f) => !isPlanFile(f));
 
     if (data.files.length === 0) {
       generate.push(makeGenerateItem(subsystem, ARTIFACT_BY_SUBSYSTEM[subsystem].defaultSources));
@@ -204,6 +210,8 @@ export function buildRemediationPlan(scored: ScoredResult, target: string): Reme
     generate,
     improve,
     source_context,
+    subsystemScores,
+    subsystemSources,
   };
 }
 
@@ -214,6 +222,22 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
   lines.push(`Target: ${plan.target}`);
   lines.push(`Overall: ${plan.overall}/100`);
   lines.push('');
+
+  if (Object.keys(plan.subsystemScores).length > 0) {
+    lines.push('## SUBSYSTEM SCORES');
+    for (const [sub, score] of Object.entries(plan.subsystemScores)) {
+      lines.push(`- ${sub}: ${score}`);
+    }
+    lines.push('');
+  }
+
+  if (Object.keys(plan.subsystemSources).length > 0) {
+    lines.push('## SUBSYSTEM SOURCES');
+    for (const [sub, files] of Object.entries(plan.subsystemSources)) {
+      lines.push(`- ${sub}: ${files.join(', ')}`);
+    }
+    lines.push('');
+  }
 
   lines.push('## GENERATE');
   if (plan.generate.length === 0) {

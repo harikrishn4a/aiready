@@ -3,6 +3,20 @@ Generated: 2026-06-05T00:00:00.000Z
 Target: examples/bare-repo
 Overall: 5/100
 
+## SUBSYSTEM SCORES
+- identity: 0
+- verification: 0
+- state: 0
+- memory: 0
+- constraints: 0
+
+## SUBSYSTEM SOURCES
+- identity: README.md, package.json
+- verification: package.json
+- state: 
+- memory: 
+- constraints: 
+
 ## GENERATE
 
 ### AGENTS.md

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
-import type { GenerateItem, ImproveItem } from './parser.js';
+import type { ArtifactPlan } from './planner.js';
 import { generateArtifact } from './generator.js';
 import { improveArtifact } from './improver.js';
 
@@ -10,6 +10,7 @@ export interface InitFlags {
   model?: string;
   force?: boolean | string;
   dryRun?: boolean;
+  yes?: boolean;
 }
 
 function isForced(flags: InitFlags, filename: string): boolean {
@@ -19,31 +20,31 @@ function isForced(flags: InitFlags, filename: string): boolean {
 }
 
 export async function executeGenerate(
-  item: GenerateItem,
+  artifact: ArtifactPlan,
   target: string,
   flags: InitFlags,
   step: number,
   total: number,
   provider: LLMProvider,
 ): Promise<void> {
-  const filePath = join(target, item.filename);
+  const filePath = join(target, artifact.filename);
   const label = `[${step}/${total}]`;
 
-  console.log(`${label} Generating ${item.filename}`);
-  console.log(`      Subsystem: ${item.subsystem}`);
-  if (item.sourceFiles.length > 0) {
-    console.log(`      Sources: ${item.sourceFiles.join(', ')}`);
+  console.log(`${label} Generating ${artifact.filename}`);
+  if (artifact.subsystem) console.log(`      Subsystem: ${artifact.subsystem}`);
+  if (artifact.sourceFiles.length > 0) {
+    console.log(`      Sources: ${artifact.sourceFiles.join(', ')}`);
   }
-  console.log(`      Template: ${item.templateFile}`);
+  console.log(`      Template: ${artifact.templateFile}`);
 
   const fileExists = existsSync(filePath);
-  const forceThis = isForced(flags, item.filename);
-  if (fileExists && !forceThis) {
-    console.log(`      ⊜ Skipped — already exists (use --force ${item.filename} to overwrite)\n`);
+  const forceThis = isForced(flags, artifact.filename);
+  if (fileExists && !forceThis && !artifact.alwaysGenerate) {
+    console.log(`      ⊜ Skipped — already exists (use --force ${artifact.filename} to overwrite)\n`);
     return;
   }
 
-  const content = await generateArtifact(item, target, provider);
+  const content = await generateArtifact(artifact, target, provider);
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, content, 'utf-8');
   const lines = content.split('\n').length;
@@ -51,25 +52,25 @@ export async function executeGenerate(
 }
 
 export async function executeImprove(
-  item: ImproveItem,
+  artifact: ArtifactPlan,
   target: string,
   flags: InitFlags,
   step: number,
   total: number,
   provider: LLMProvider,
 ): Promise<void> {
-  const filePath = join(target, item.filename);
+  const filePath = join(target, artifact.filename);
   const label = `[${step}/${total}]`;
 
-  console.log(`${label} Improving ${item.filename} → ${item.section}`);
-  console.log(`      Missing: ${item.missing}`);
+  console.log(`${label} Improving ${artifact.filename}`);
+  console.log(`      Reason: ${artifact.reason}`);
 
   if (!existsSync(filePath)) {
     console.log(`      ⊜ Skipped — file does not exist\n`);
     return;
   }
 
-  const updatedContent = await improveArtifact(item, target, provider);
+  const updatedContent = await improveArtifact(artifact, target, provider);
   writeFileSync(filePath, updatedContent, 'utf-8');
   console.log(`      ✓ Patched\n`);
 }

@@ -4,7 +4,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { executeGenerate, executeImprove, type InitFlags } from '../src/init/executor';
 import type { LLMProvider } from '../src/utils/llm';
-import type { GenerateItem, ImproveItem } from '../src/init/parser';
+import type { ArtifactPlan } from '../src/init/planner';
 
 let tmp: string;
 
@@ -23,21 +23,26 @@ function mockProvider(response = '# Generated content\n\nsome content here'): LL
   };
 }
 
-const BASE_GENERATE: GenerateItem = {
+const BASE_GENERATE: ArtifactPlan = {
   filename: 'PROGRESS.md',
+  action: 'generate',
   subsystem: 'state',
-  required: 'current state, completed items',
   templateFile: 'examples/progress.md',
   sourceFiles: ['package.json'],
+  currentScore: 0,
+  reason: 'file does not exist',
+  alwaysGenerate: false,
 };
 
-const BASE_IMPROVE: ImproveItem = {
+const BASE_IMPROVE: ArtifactPlan = {
   filename: 'AGENTS.md',
+  action: 'improve',
   subsystem: 'verification',
-  section: 'verification section',
-  missing: 'no commands',
-  fix: 'add verification commands',
+  templateFile: 'examples/agents.md',
   sourceFiles: [],
+  currentScore: 45,
+  reason: 'score 45/100 — below threshold',
+  alwaysGenerate: false,
 };
 
 describe('executeGenerate', () => {
@@ -79,9 +84,9 @@ describe('executeGenerate', () => {
   });
 
   it('creates parent directories when needed', async () => {
-    const item: GenerateItem = { ...BASE_GENERATE, filename: 'docs/PROGRESS.md' };
+    const artifact: ArtifactPlan = { ...BASE_GENERATE, filename: 'docs/PROGRESS.md' };
     const provider = mockProvider('# content');
-    await executeGenerate(item, tmp, {}, 1, 1, provider);
+    await executeGenerate(artifact, tmp, {}, 1, 1, provider);
     expect(existsSync(join(tmp, 'docs', 'PROGRESS.md'))).toBe(true);
   });
 
@@ -90,6 +95,17 @@ describe('executeGenerate', () => {
     await executeGenerate(BASE_GENERATE, tmp, {}, 1, 1, provider);
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[2]).toMatchObject({ fast: false });
+  });
+
+  it('overwrites existing file when alwaysGenerate is true without --force', async () => {
+    writeFileSync(join(tmp, 'TASK.md'), '# existing task');
+    // alwaysGenerate=true means blank template — copied directly, no LLM call needed
+    const artifact: ArtifactPlan = { ...BASE_GENERATE, filename: 'TASK.md', alwaysGenerate: true };
+    const provider = mockProvider('# blank task template');
+    await executeGenerate(artifact, tmp, {}, 1, 1, provider);
+    // File should be overwritten (not skipped) — alwaysGenerate bypasses the existsSync guard
+    const written = readFileSync(join(tmp, 'TASK.md'), 'utf-8');
+    expect(written).not.toBe('# existing task');
   });
 });
 
@@ -120,7 +136,6 @@ describe('executeImprove', () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# v1');
     const provider = mockProvider('# v2');
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 2, provider);
-    // Simulate external edit between calls
     writeFileSync(join(tmp, 'AGENTS.md'), '# v2 modified externally');
     await executeImprove(BASE_IMPROVE, tmp, {}, 2, 2, provider);
     const secondCall = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[1];

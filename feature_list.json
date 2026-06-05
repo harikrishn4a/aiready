@@ -363,6 +363,31 @@
       ],
       "agent_notes": "Three bugs fixed: (1) plan.md was treated as an improve target — fixed by isPlanFile() guard in both remediation.ts and parser.ts. (2) GENERATE items not extracted — fixed by changing renderRemediationMarkdown to emit ## GENERATE/## IMPROVE/## SOURCE CONTEXT sections and updating parser to read those. (3) Non-canonical files now trigger GENERATE of canonical artifact instead of IMPROVE of the non-canonical file. parsePlan is now async (fs/promises). source_signals renamed to source_files throughout. { fast: false } added to all LLM calls in generator and improver.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-014",
+      "priority": 14,
+      "area": "init",
+      "title": "Stage 2 init rebuild — full canonical structure generation",
+      "user_visible_behavior": "npx aiready init generates all 13 canonical harness artifacts (AGENTS.md, CONSTRAINTS.md, ARCHITECTURE.md, DECISIONS.md, PROGRESS.md, SESSION-HANDOFF.md, TASK.md, features.md, feature_list.json, QUALITY.md, Makefile, scripts/init.sh, scripts/verify.sh); shows plan preview with skip/improve/generate actions; asks for confirmation (--yes to skip); merges CLAUDE.md/.cursorrules etc. into AGENTS.md and writes shims; shows per-subsystem score delta",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test",
+        "node dist/cli.js init --target ./examples/bare-repo --dry-run"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 75.31 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 207/207 (16 test files: +init-planner 12 tests, +init-consolidator 6 tests)",
+        "node dist/cli.js init --target ./examples/bare-repo --dry-run: shows all 13 canonical artifacts with source context"
+      ],
+      "agent_notes": "planner.ts: reads SUBSYSTEM SCORES + SUBSYSTEM SOURCES from plan.md; for each of 13 canonical artifacts decides skip (score>=80 and exists), improve (score<80 and exists), generate (doesn't exist); alwaysGenerate=true for TASK.md/features.md/feature_list.json/QUALITY.md (never skipped). generator.ts: strict template adherence prompt, detectTechStack(), blank template copy without LLM for alwaysGenerate files. improver.ts: accepts ArtifactPlan. consolidator.ts: extracts unique content from CLAUDE.md/.cursorrules etc. into AGENTS.md, writes shims. remediation.ts: now writes ## SUBSYSTEM SCORES and ## SUBSYSTEM SOURCES to plan.md. scorer.ts: new getAuditScoreDetailed() returns per-subsystem scores. index.ts: full pipeline with plan preview, confirmation prompt (--yes to skip), consolidation, per-subsystem score delta.",
+      "last_updated": "2026-06-05"
     }
   ]
 }

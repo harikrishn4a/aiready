@@ -38,12 +38,14 @@ program
   .option('--model <id>', 'model ID (e.g. claude-sonnet-4-6) — skips prompt')
   .option('--force [filename]', 'overwrite existing files (all, or specific filename)')
   .option('--dry-run', 'show what would be generated without writing')
-  .action((opts: { target: string; provider?: string; model?: string; force?: boolean | string; dryRun?: boolean }) => {
+  .option('--yes', 'skip confirmation prompt')
+  .action((opts: { target: string; provider?: string; model?: string; force?: boolean | string; dryRun?: boolean; yes?: boolean }) => {
     runInit(opts.target, {
       provider: opts.provider,
       model: opts.model,
       force: opts.force,
       dryRun: opts.dryRun,
+      yes: opts.yes,
     }).catch((err: unknown) => {
       process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);
