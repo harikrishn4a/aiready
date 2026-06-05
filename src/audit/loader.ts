@@ -1,5 +1,5 @@
 import { join } from 'path';
-import { readFile, listDirs, listFiles, statMtime, exists } from '../utils/fs.js';
+import { readFile, listDirs, listFiles, statMtime, exists, walkMdFiles } from '../utils/fs.js';
 
 const AGENT_ENTRY_CANDIDATES = [
   'AGENTS.md',
@@ -21,12 +21,24 @@ function loadAgentEntry(targetDir: string): string | null {
   return null;
 }
 
+export interface RepoFile {
+  path: string;      // relative path from targetDir
+  name: string;      // basename
+  preview: string;   // first 200 chars of content
+  fullContent: string;
+}
+
 export interface RepoFiles {
+  // LLM pipeline: all markdown files found in the repo
+  mdFiles: RepoFile[];
+
+  // Legacy convenience lookups used by cross-ref and tests
   agentsMd: string | null;
   architectureMd: string | null;
   constraintsMd: string | null;
   progressMd: string | null;
   sessionHandoffMd: string | null;
+
   packageJsonRaw: string | null;
   packageJson: Record<string, unknown> | null;
   srcDirs: string[];
@@ -58,7 +70,16 @@ export function loadRepo(targetDir: string): RepoFiles {
     statMtime(join(targetDir, 'PROGRESS.md')) ??
     statMtime(join(targetDir, 'progress.md'));
 
+  const rawMdFiles = walkMdFiles(targetDir);
+  const mdFiles: RepoFile[] = rawMdFiles.map(({ relPath, name, fullContent }) => ({
+    path: relPath,
+    name,
+    preview: fullContent.slice(0, 200),
+    fullContent,
+  }));
+
   return {
+    mdFiles,
     agentsMd,
     architectureMd,
     constraintsMd,

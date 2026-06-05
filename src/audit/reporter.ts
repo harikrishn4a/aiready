@@ -1,5 +1,4 @@
 import type { ScoredResult } from './scorer.js';
-import type { CrossRefResult } from './cross-ref.js';
 
 export interface ReportOptions {
   json: boolean;
@@ -10,10 +9,18 @@ function bar(score: number): string {
   return '█'.repeat(filled) + '░'.repeat(10 - filled);
 }
 
-function subsystemLine(name: string, score: number, gaps: string[]): string {
+function abbreviateFiles(files: string[]): string {
+  if (files.length === 0) return '(no files)';
+  const names = files.map((p) => p.split('/').pop() ?? p);
+  if (names.length <= 3) return names.join(', ');
+  return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
+}
+
+function subsystemLine(name: string, score: number, gaps: string[], files: string[]): string {
   const scoreStr = String(score).padStart(3);
+  const filePart = abbreviateFiles(files).padEnd(30);
   const summary = gaps.length > 0 ? gaps[0] : 'All checks passed';
-  return `${name.padEnd(14)}  ${bar(score)}  ${scoreStr}   ${summary}`;
+  return `${name.padEnd(14)}  ${bar(score)}  ${scoreStr}   ${filePart}  ${summary}`;
 }
 
 function getRecommendation(scored: ScoredResult): string {
@@ -42,19 +49,17 @@ function getRecommendation(scored: ScoredResult): string {
   return messages[lowest.name] ?? 'Run `npx aiready init` to generate missing artifacts.';
 }
 
-function collectCriticalGaps(scored: ScoredResult, xref: CrossRefResult): string[] {
+function collectCriticalGaps(scored: ScoredResult): string[] {
   const gaps: string[] = [];
 
-  for (const [, value] of Object.entries(scored)) {
-    if (typeof value === 'object' && 'score' in value && 'gaps' in value) {
-      const sub = value as { score: number; gaps: string[] };
-      if (sub.score < 50) {
-        gaps.push(...sub.gaps.slice(0, 1));
-      }
+  for (const key of ['identity', 'verification', 'state', 'memory', 'constraints'] as const) {
+    const sub = scored[key];
+    if (sub.score < 50 && sub.gaps.length > 0) {
+      gaps.push(sub.gaps[0] as string);
     }
   }
 
-  for (const check of xref.checks) {
+  for (const check of scored.crossRef.checks) {
     if (!check.passed) {
       gaps.push(check.detail);
     }
@@ -63,22 +68,18 @@ function collectCriticalGaps(scored: ScoredResult, xref: CrossRefResult): string
   return gaps;
 }
 
-export function report(
-  scored: ScoredResult,
-  xref: CrossRefResult,
-  opts: ReportOptions,
-): void {
+export function report(scored: ScoredResult, opts: ReportOptions): void {
   if (opts.json) {
     const out = {
       overall: scored.overall,
       subsystems: {
-        identity: scored.identity,
-        verification: scored.verification,
-        state: scored.state,
-        memory: scored.memory,
-        constraints: scored.constraints,
+        identity: { score: scored.identity.score, gaps: scored.identity.gaps, files: scored.identity.files },
+        verification: { score: scored.verification.score, gaps: scored.verification.gaps, files: scored.verification.files },
+        state: { score: scored.state.score, gaps: scored.state.gaps, files: scored.state.files },
+        memory: { score: scored.memory.score, gaps: scored.memory.gaps, files: scored.memory.files },
+        constraints: { score: scored.constraints.score, gaps: scored.constraints.gaps, files: scored.constraints.files },
       },
-      crossReference: xref,
+      crossReference: scored.crossRef,
       recommendation: getRecommendation(scored),
     };
     process.stdout.write(JSON.stringify(out, null, 2) + '\n');
@@ -89,13 +90,13 @@ export function report(
 
   lines.push(`AI Readiness: ${scored.overall}/100`);
   lines.push('');
-  lines.push(subsystemLine('identity', scored.identity.score, scored.identity.gaps));
-  lines.push(subsystemLine('verification', scored.verification.score, scored.verification.gaps));
-  lines.push(subsystemLine('state', scored.state.score, scored.state.gaps));
-  lines.push(subsystemLine('memory', scored.memory.score, scored.memory.gaps));
-  lines.push(subsystemLine('constraints', scored.constraints.score, scored.constraints.gaps));
+  lines.push(subsystemLine('identity', scored.identity.score, scored.identity.gaps, scored.identity.files));
+  lines.push(subsystemLine('verification', scored.verification.score, scored.verification.gaps, scored.verification.files));
+  lines.push(subsystemLine('state', scored.state.score, scored.state.gaps, scored.state.files));
+  lines.push(subsystemLine('memory', scored.memory.score, scored.memory.gaps, scored.memory.files));
+  lines.push(subsystemLine('constraints', scored.constraints.score, scored.constraints.gaps, scored.constraints.files));
 
-  const criticalGaps = collectCriticalGaps(scored, xref);
+  const criticalGaps = collectCriticalGaps(scored);
   if (criticalGaps.length > 0) {
     lines.push('');
     lines.push('Critical gaps:');

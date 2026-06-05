@@ -18,6 +18,9 @@ program
     runAudit(opts.target, {
       json: opts.json,
       minScore: parseInt(opts.minScore, 10),
+    }).catch((err: unknown) => {
+      process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
     });
   });
 

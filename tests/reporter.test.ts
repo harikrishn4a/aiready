@@ -1,23 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { report } from '../src/audit/reporter';
 import type { ScoredResult } from '../src/audit/scorer';
-import type { CrossRefResult } from '../src/audit/cross-ref';
 
 function makeScored(overrides: Partial<ScoredResult> = {}): ScoredResult {
-  const sub = (score: number) => ({ score, gaps: score < 100 ? [`gap at ${score}`] : [] });
+  const sub = (score: number, files: string[] = []) => ({
+    score,
+    gaps: score < 100 ? [`gap at ${score}`] : [],
+    files,
+  });
   return {
-    identity: sub(80),
-    verification: sub(60),
-    state: sub(40),
-    memory: sub(20),
-    constraints: sub(100),
+    identity: sub(80, ['AGENTS.md']),
+    verification: sub(60, ['AGENTS.md']),
+    state: sub(40, ['PROGRESS.md']),
+    memory: sub(20, []),
+    constraints: sub(100, ['AGENTS.md']),
     overall: 60,
+    crossRef: { checks: [] },
     ...overrides,
   };
-}
-
-function makeXref(overrides: Partial<CrossRefResult> = {}): CrossRefResult {
-  return { checks: [], ...overrides };
 }
 
 describe('report — terminal output', () => {
@@ -36,12 +36,12 @@ describe('report — terminal output', () => {
   });
 
   it('prints overall score header', () => {
-    report(makeScored({ overall: 47 }), makeXref(), { json: false });
+    report(makeScored({ overall: 47 }), { json: false });
     expect(output).toContain('AI Readiness: 47/100');
   });
 
   it('prints all 5 subsystem names', () => {
-    report(makeScored(), makeXref(), { json: false });
+    report(makeScored(), { json: false });
     expect(output).toContain('identity');
     expect(output).toContain('verification');
     expect(output).toContain('state');
@@ -50,16 +50,26 @@ describe('report — terminal output', () => {
   });
 
   it('prints bar characters', () => {
-    report(makeScored(), makeXref(), { json: false });
+    report(makeScored(), { json: false });
     expect(output).toMatch(/[█░]/);
+  });
+
+  it('prints file names in output lines', () => {
+    report(makeScored(), { json: false });
+    expect(output).toContain('AGENTS.md');
+  });
+
+  it('prints (no files) when subsystem has no files', () => {
+    report(makeScored(), { json: false });
+    expect(output).toContain('(no files)');
   });
 
   it('prints critical gaps for subsystems below 50', () => {
     const scored = makeScored({
-      state: { score: 20, gaps: ['No PROGRESS.md'] },
-      memory: { score: 30, gaps: ['No ARCHITECTURE.md'] },
+      state: { score: 20, gaps: ['No PROGRESS.md'], files: [] },
+      memory: { score: 30, gaps: ['No ARCHITECTURE.md'], files: [] },
     });
-    report(scored, makeXref(), { json: false });
+    report(scored, { json: false });
     expect(output).toContain('Critical gaps:');
     expect(output).toContain('No PROGRESS.md');
     expect(output).toContain('No ARCHITECTURE.md');
@@ -67,30 +77,29 @@ describe('report — terminal output', () => {
 
   it('does not print critical gaps section when all subsystems score >= 50', () => {
     const scored = makeScored({
-      identity: { score: 80, gaps: [] },
-      verification: { score: 60, gaps: [] },
-      state: { score: 50, gaps: [] },
-      memory: { score: 70, gaps: [] },
-      constraints: { score: 100, gaps: [] },
+      identity: { score: 80, gaps: [], files: [] },
+      verification: { score: 60, gaps: [], files: [] },
+      state: { score: 50, gaps: [], files: [] },
+      memory: { score: 70, gaps: [], files: [] },
+      constraints: { score: 100, gaps: [], files: [] },
       overall: 72,
     });
-    report(scored, makeXref(), { json: false });
+    report(scored, { json: false });
     expect(output).not.toContain('Critical gaps:');
   });
 
   it('prints failed cross-ref checks in critical gaps', () => {
-    const xref = makeXref({
-      checks: [{ name: 'commands-check', passed: false, detail: '`npm run typecheck` not in package.json' }],
+    const scored = makeScored({
+      crossRef: {
+        checks: [{ name: 'cmd-check', passed: false, detail: '`npm run typecheck` not in package.json' }],
+      },
     });
-    report(makeScored(), xref, { json: false });
+    report(scored, { json: false });
     expect(output).toContain('`npm run typecheck` not in package.json');
   });
 
   it('prints a recommendation', () => {
-    report(makeScored({ memory: { score: 0, gaps: ['No ARCHITECTURE.md'] } }), makeXref(), {
-      json: false,
-    });
-    // Lowest score drives recommendation
+    report(makeScored({ memory: { score: 0, gaps: ['No ARCHITECTURE.md'], files: [] } }), { json: false });
     expect(output.length).toBeGreaterThan(100);
   });
 });
@@ -111,12 +120,12 @@ describe('report — JSON output', () => {
   });
 
   it('outputs valid JSON', () => {
-    report(makeScored({ overall: 60 }), makeXref(), { json: true });
+    report(makeScored({ overall: 60 }), { json: true });
     expect(() => JSON.parse(output)).not.toThrow();
   });
 
   it('JSON has overall, subsystems, crossReference, recommendation', () => {
-    report(makeScored({ overall: 60 }), makeXref(), { json: true });
+    report(makeScored({ overall: 60 }), { json: true });
     const parsed = JSON.parse(output) as Record<string, unknown>;
     expect(parsed).toHaveProperty('overall');
     expect(parsed).toHaveProperty('subsystems');
@@ -125,19 +134,25 @@ describe('report — JSON output', () => {
   });
 
   it('JSON overall matches scored.overall', () => {
-    report(makeScored({ overall: 42 }), makeXref(), { json: true });
+    report(makeScored({ overall: 42 }), { json: true });
     const parsed = JSON.parse(output) as { overall: number };
     expect(parsed.overall).toBe(42);
   });
 
   it('JSON subsystems has all 5 names', () => {
-    report(makeScored(), makeXref(), { json: true });
+    report(makeScored(), { json: true });
     const parsed = JSON.parse(output) as { subsystems: Record<string, unknown> };
     expect(parsed.subsystems).toHaveProperty('identity');
     expect(parsed.subsystems).toHaveProperty('verification');
     expect(parsed.subsystems).toHaveProperty('state');
     expect(parsed.subsystems).toHaveProperty('memory');
     expect(parsed.subsystems).toHaveProperty('constraints');
+  });
+
+  it('JSON subsystems include files array', () => {
+    report(makeScored(), { json: true });
+    const parsed = JSON.parse(output) as { subsystems: { identity: { files: string[] } } };
+    expect(Array.isArray(parsed.subsystems.identity.files)).toBe(true);
   });
 });
 
@@ -158,8 +173,7 @@ describe('bar rendering', () => {
 
   it('score 0 renders all empty bar', () => {
     report(
-      makeScored({ identity: { score: 0, gaps: ['missing'] } }),
-      makeXref(),
+      makeScored({ identity: { score: 0, gaps: ['missing'], files: [] } }),
       { json: false },
     );
     expect(output).toContain('░░░░░░░░░░');
@@ -167,8 +181,7 @@ describe('bar rendering', () => {
 
   it('score 100 renders all filled bar', () => {
     report(
-      makeScored({ constraints: { score: 100, gaps: [] } }),
-      makeXref(),
+      makeScored({ constraints: { score: 100, gaps: [], files: [] } }),
       { json: false },
     );
     expect(output).toContain('██████████');

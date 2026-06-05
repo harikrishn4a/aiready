@@ -62,3 +62,23 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Copy harness-creator's subsystem names — misses constraints scoring entirely
 - **Constraints introduced**: Subsystem names are fixed across all stages. Future stages (analyze, drift) must use the same 5 names for consistency.
 - **Revisit when**: User research reveals a missing subsystem that significantly affects agent reliability
+
+---
+
+### 2026-06-05: Rebuild audit as LLM-powered harness scanner
+
+- **Decision**: Replace Stage 1's deterministic heuristic scoring with a two-step LLM pipeline: (1) a Haiku classification call that maps each markdown file to one or more harness subsystems regardless of filename, (2) a Sonnet scoring call that evaluates content quality per subsystem given the mapped files
+- **Reason**: Deterministic regex/heuristic scoring penalises repos with non-standard filenames (CLAUDE.md instead of AGENTS.md, TODO.md instead of PROGRESS.md) and rewards empty files that happen to have the right name. LLM classification correctly handles naming variation; LLM quality scoring produces richer gaps with actionable text.
+- **Rejected alternatives**: Keep deterministic scoring and add filename aliases — fixes the naming problem but not the quality problem. A single combined LLM call — simpler but conflates cheap classification with expensive quality scoring.
+- **Constraints introduced**: `ANTHROPIC_API_KEY` must be set in the environment before running `aiready audit`. If missing, the CLI exits with a structured error. Tests must mock `@anthropic-ai/sdk` to run without a real API key.
+- **Revisit when**: LLM latency or cost becomes a problem at scale; consider caching scored results keyed on file content hashes.
+
+---
+
+### 2026-06-05: Add @anthropic-ai/sdk as a production dependency
+
+- **Decision**: Add `@anthropic-ai/sdk` to `dependencies` (not `devDependencies`) to power the LLM-based mapper and scorer in the audit pipeline
+- **Reason**: The SDK is required at runtime by `aiready audit`, not just during development or testing. Putting it in `devDependencies` would cause `npx aiready` to fail for end users.
+- **Rejected alternatives**: Using raw `fetch` against the Anthropic API — avoids the dependency but loses typed responses, retry logic, and prompt caching helpers that the SDK provides.
+- **Constraints introduced**: The SDK must not be imported anywhere in Stage 1 code paths that existed before this decision (cross-ref.ts, loader.ts — these remain LLM-free). Only mapper.ts and scorer.ts import the SDK.
+- **Revisit when**: A lighter-weight alternative to the full SDK is available, or when the project moves to ESM and needs to re-evaluate bundling.

@@ -1,6 +1,6 @@
 {
   "project": "aiready",
-  "last_updated": "2026-06-04",
+  "last_updated": "2026-06-05",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -161,6 +161,34 @@
       ],
       "agent_notes": "Fixed cli.ts to use require.main===module instead of VITEST env var. Added spawnCli helper in integration tests to strip VITEST from child env.",
       "last_updated": "2026-06-04"
+    },
+    {
+      "id": "feat-006",
+      "priority": 6,
+      "area": "audit",
+      "title": "LLM-powered audit rebuild",
+      "user_visible_behavior": "aiready audit uses Haiku to classify md files to subsystems and Sonnet to score quality; reporter shows file attribution; exits 1 with clear error if ANTHROPIC_API_KEY unset",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "node dist/cli.js audit: exits 1 with ERROR/WHY/FIX when ANTHROPIC_API_KEY not set",
+        "node dist/cli.js --version: 0.1.0",
+        "node dist/cli.js --help: lists audit command"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 21.09 KB, zero errors",
+        "npm test: 86/86 (cross-ref 14, mapper 8, reporter 16, scorer 11, loader 22, cli 2, integration 13)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "node dist/cli.js audit without ANTHROPIC_API_KEY: exit 1, ERROR/WHY/FIX to stderr",
+        "DECISIONS.md: two 2026-06-05 entries added (LLM audit + SDK dependency)"
+      ],
+      "agent_notes": "mapper.ts uses claude-haiku-4-5-20251001; scorer.ts uses claude-sonnet-4-6 with prompt caching. Tests mock @anthropic-ai/sdk. examples/ fixtures: good-repo, bare-repo, misnamed-repo. Removed spawnSync tests that required real LLM; kept CLI binary tests for key guard, --version, --help.",
+      "last_updated": "2026-06-05"
     }
   ]
 }

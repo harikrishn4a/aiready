@@ -1,4 +1,5 @@
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
+import { join } from 'path';
 
 export function readFile(filePath: string): string | null {
   try {
@@ -38,4 +39,39 @@ export function statMtime(filePath: string): Date | null {
   } catch {
     return null;
   }
+}
+
+const SKIP_DIRS = new Set([
+  'node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.nuxt',
+  '__pycache__', '.cache', 'vendor', 'tmp', '.tmp',
+]);
+
+export interface MdFileEntry {
+  relPath: string;
+  name: string;
+  fullContent: string;
+}
+
+export function walkMdFiles(dirPath: string, relBase = '', depth = 0): MdFileEntry[] {
+  if (depth > 3) return [];
+  const results: MdFileEntry[] = [];
+  try {
+    const entries = readdirSync(dirPath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      const relPath = relBase ? `${relBase}/${entry.name}` : entry.name;
+      const fullPath = join(dirPath, entry.name);
+      if (entry.isDirectory()) {
+        results.push(...walkMdFiles(fullPath, relPath, depth + 1));
+      } else if (entry.isFile() && entry.name.endsWith('.md')) {
+        const content = readFile(fullPath);
+        if (content !== null) {
+          results.push({ relPath, name: entry.name, fullContent: content });
+        }
+      }
+    }
+  } catch {
+    // unreadable directory — skip silently
+  }
+  return results;
 }

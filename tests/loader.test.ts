@@ -112,3 +112,52 @@ describe('loadRepo', () => {
     expect(loadRepo(tmp).targetDir).toBe(tmp);
   });
 });
+
+describe('loadRepo — mdFiles', () => {
+  it('returns empty mdFiles for a directory with no .md files', () => {
+    expect(loadRepo(tmp).mdFiles).toEqual([]);
+  });
+
+  it('includes .md files at root level', () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# Agents');
+    writeFileSync(join(tmp, 'PROGRESS.md'), '## Progress');
+    const r = loadRepo(tmp);
+    expect(r.mdFiles).toHaveLength(2);
+    expect(r.mdFiles.map((f) => f.name)).toContain('AGENTS.md');
+    expect(r.mdFiles.map((f) => f.name)).toContain('PROGRESS.md');
+  });
+
+  it('includes .md files in subdirectories', () => {
+    mkdirSync(join(tmp, 'docs'), { recursive: true });
+    writeFileSync(join(tmp, 'docs', 'architecture.md'), '# Architecture');
+    const r = loadRepo(tmp);
+    expect(r.mdFiles.some((f) => f.path === 'docs/architecture.md')).toBe(true);
+  });
+
+  it('populates path, name, preview, and fullContent', () => {
+    const content = '# Title\n' + 'A'.repeat(300);
+    writeFileSync(join(tmp, 'README.md'), content);
+    const r = loadRepo(tmp);
+    const readme = r.mdFiles.find((f) => f.name === 'README.md');
+    expect(readme).toBeDefined();
+    expect(readme?.path).toBe('README.md');
+    expect(readme?.name).toBe('README.md');
+    expect(readme?.preview).toHaveLength(200);
+    expect(readme?.fullContent).toBe(content);
+  });
+
+  it('does not include non-.md files in mdFiles', () => {
+    writeFileSync(join(tmp, 'package.json'), '{}');
+    writeFileSync(join(tmp, 'README.md'), '# Read me');
+    const r = loadRepo(tmp);
+    expect(r.mdFiles.every((f) => f.name.endsWith('.md'))).toBe(true);
+  });
+
+  it('skips node_modules directory', () => {
+    mkdirSync(join(tmp, 'node_modules', 'some-pkg'), { recursive: true });
+    writeFileSync(join(tmp, 'node_modules', 'some-pkg', 'README.md'), '# Package');
+    writeFileSync(join(tmp, 'README.md'), '# Root');
+    const r = loadRepo(tmp);
+    expect(r.mdFiles.every((f) => !f.path.startsWith('node_modules'))).toBe(true);
+  });
+});

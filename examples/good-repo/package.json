@@ -1,0 +1,14 @@
+{
+  "name": "example-service",
+  "version": "2.1.0",
+  "description": "Example TypeScript REST API for demonstrating AI harness quality",
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/",
+    "test": "vitest run",
+    "migrate:latest": "knex migrate:latest",
+    "migrate:rollback": "knex migrate:rollback",
+    "dev": "tsup --watch"
+  }
+}

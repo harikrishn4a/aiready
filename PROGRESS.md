@@ -1,26 +1,27 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 15.49 KB (full pipeline bundled)
-- Tests: 89/89 passing (6 test files)
+- Build: passing — dist/cli.js 21.09 KB (full pipeline bundled)
+- Tests: 86/86 passing (7 test files)
 - Typecheck: clean
 - Lint: clean
-- Last verified: 2026-06-04
-- Active feature: none — **Stage 1 complete**
+- Last verified: 2026-06-05
+- Active feature: none — **Stage 1 LLM rebuild complete**
 
 ## Completed
 - [x] Product design and stage definitions
 - [x] AGENTS.md, ARCHITECTURE.md, DECISIONS.md
 - [x] Example harness templates in examples/
 - [x] **feat-000** — Project scaffold (build/test/typecheck/lint all passing)
-- [x] **feat-001** — Audit loader: loadRepo() reads target repo into typed RepoFiles struct
-- [x] **feat-002** — Audit scorer: scoreRepo() scores 5 subsystems, content-aware heuristics
+- [x] **feat-001** — Audit loader: loadRepo() reads target repo into typed RepoFiles struct; now also walks all .md files into mdFiles[]
+- [x] **feat-002** — Audit scorer: scoreRepo() scores 5 subsystems, content-aware heuristics (replaced by LLM scorer in feat-006)
 - [x] **feat-003** — Cross-ref: validates commands in AGENTS.md vs package.json, modules vs src/
 - [x] **feat-004** — Reporter: terminal bar-chart output + JSON mode; audit pipeline wired end-to-end
 - [x] **feat-005** — Integration: good-repo scores 100/100, bare-repo scores 0/100, all CLI flags verified
+- [x] **feat-006** — LLM-powered audit rebuild: mapper.ts (Haiku classifies md files → subsystems), scorer.ts (Sonnet scores quality per subsystem), reporter.ts (file attribution), ANTHROPIC_API_KEY guard
 
 ## In progress
-- nothing — Stage 1 complete
+- nothing — Stage 1 LLM rebuild complete
 
 ## Blocked
 - nothing
@@ -47,6 +48,14 @@
 - [x] `npx aiready audit --target test-fixtures/bare-repo` scores 0/100 (< 30) ✓
 - [x] `npx aiready audit --json` outputs valid JSON with expected schema ✓
 - [x] `npx aiready audit --min-score 80` exits with code 1 when score is below threshold ✓
+
+### Stage 1 LLM rebuild verification — DONE
+- [x] `node dist/cli.js audit` exits 1 with ERROR/WHY/FIX when ANTHROPIC_API_KEY not set ✓
+- [x] mapper.ts uses claude-haiku-4-5-20251001 for classification ✓
+- [x] scorer.ts uses claude-sonnet-4-6 for quality scoring ✓
+- [x] reporter.ts shows file attribution per subsystem ✓
+- [x] examples/good-repo, bare-repo, misnamed-repo fixtures created ✓
+- [x] DECISIONS.md updated with two 2026-06-05 entries ✓
 
 ## Backlog — Stage 2+
 - Stage 2: init command (LLM-assisted generation)
