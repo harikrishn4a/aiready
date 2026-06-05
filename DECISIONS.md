@@ -185,6 +185,16 @@ Append new decisions at the bottom — never edit existing ones.
 
 ---
 
+### 2026-06-05: Add ora for init spinner
+
+- **Decision**: Add `ora@5` (v5.4.1) as a runtime dependency for TTY spinner in the `init` executor.
+- **Reason**: LLM calls during init take 5–30 seconds per artifact. Without a spinner, the terminal appears frozen. `ora` is the standard Node.js spinner library. Version 5 is used because it supports both CJS and ESM — `ora@8` is ESM-only and cannot be `require()`'d by tsup's CJS output bundle.
+- **Rejected alternatives**: Reuse `src/utils/spinner.ts` — that file's `withSpinner` is a single shared spinner; init needs per-artifact spinners with text updates mid-call. Roll a custom spinner — not worth the maintenance. Use `ora@8` — fails at runtime with `ERR_REQUIRE_ESM` from the CJS bundle.
+- **Constraints introduced**: Pinned to `ora@5`. Upgrading to ora@6+ will break the CJS bundle unless tsup is switched to ESM or ora is marked external.
+- **Revisit when**: The CLI is migrated to pure ESM output (tsup format: ['esm']) — then ora@8+ can be used directly.
+
+---
+
 ### 2026-06-05: Init executes plan.md and uses Graphify for context
 
 - **Decision**: Stage 2 `planner.ts` parses GENERATE/IMPROVE/SKIP from `.aiready/plan.md` only — no independent canonical artifact decisions. `executor.ts` strips LLM markdown fences before write and routes empty improve targets through the generate path. When `graphify-out/graph.json` exists, init always injects subsystem-ranked graphify context into generate/improve prompts; it expands `source_files` only when plan sources are thin (<500 chars), using SOURCE CONTEXT paths and graphify-ranked markdown files.

@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
+import ora from 'ora';
 import type { LLMProvider } from '../utils/llm.js';
 import type { ArtifactPlan } from './planner.js';
 import { generateArtifact, loadTemplate, type InitContext } from './generator.js';
@@ -68,20 +69,32 @@ export async function executeGenerate(
     return;
   }
 
-  const rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
-  let finalContent = rawContent;
-  if (!artifact.generateOnly) {
+  if (artifact.generateOnly) {
+    const rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
+    const lines = writeArtifact(filePath, rawContent, artifact.filename);
+    console.log(`      ✓ Written — ${lines} lines\n`);
+    return;
+  }
+
+  const spinner = ora({ text: 'Generating...', indent: 6 }).start();
+  try {
+    const rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
+    spinner.text = 'Correcting headings...';
     const template = loadTemplate(artifact.templateFile);
     const { content: corrected, corrections } = await correctHeadings(
       rawContent, template, artifact.filename, provider,
     );
-    finalContent = cleanLLMOutput(corrected);
+    const finalContent = cleanLLMOutput(corrected);
+    spinner.stop();
     if (corrections.length > 0) {
       console.log(`      ↻ Corrected: ${corrections.join(', ')}`);
     }
+    const lines = writeArtifact(filePath, finalContent, artifact.filename);
+    console.log(`      ✓ Written — ${lines} lines\n`);
+  } catch (error) {
+    spinner.fail(`Failed: ${(error as Error).message}`);
+    throw error;
   }
-  const lines = writeArtifact(filePath, finalContent, artifact.filename);
-  console.log(`      ✓ Written — ${lines} lines\n`);
 }
 
 export async function executeImprove(
@@ -104,22 +117,30 @@ export async function executeImprove(
     return;
   }
 
-  const currentContent = readFileSync(filePath, 'utf-8');
-  let rawContent: string;
-  if (currentContent.trim().length === 0) {
-    console.log(`      Empty file — using generate path`);
-    rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
-  } else {
-    rawContent = cleanLLMOutput(await improveArtifact(artifact, target, provider, initContext));
+  const spinner = ora({ text: 'Improving...', indent: 6 }).start();
+  try {
+    const currentContent = readFileSync(filePath, 'utf-8');
+    let rawContent: string;
+    if (currentContent.trim().length === 0) {
+      console.log(`      Empty file — using generate path`);
+      rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
+    } else {
+      rawContent = cleanLLMOutput(await improveArtifact(artifact, target, provider, initContext));
+    }
+    spinner.text = 'Correcting headings...';
+    const template = loadTemplate(artifact.templateFile);
+    const { content: corrected, corrections } = await correctHeadings(
+      rawContent, template, artifact.filename, provider,
+    );
+    const finalContent = cleanLLMOutput(corrected);
+    spinner.stop();
+    if (corrections.length > 0) {
+      console.log(`      ↻ Corrected: ${corrections.join(', ')}`);
+    }
+    const lines = writeArtifact(filePath, finalContent, artifact.filename);
+    console.log(`      ✓ Written — ${lines} lines\n`);
+  } catch (error) {
+    spinner.fail(`Failed: ${(error as Error).message}`);
+    throw error;
   }
-  const template = loadTemplate(artifact.templateFile);
-  const { content: corrected, corrections } = await correctHeadings(
-    rawContent, template, artifact.filename, provider,
-  );
-  const finalContent = cleanLLMOutput(corrected);
-  if (corrections.length > 0) {
-    console.log(`      ↻ Corrected: ${corrections.join(', ')}`);
-  }
-  const lines = writeArtifact(filePath, finalContent, artifact.filename);
-  console.log(`      ✓ Written — ${lines} lines\n`);
 }
