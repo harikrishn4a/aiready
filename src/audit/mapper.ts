@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type { LLMProvider } from '../utils/llm.js';
 import type { RepoFile } from './loader.js';
 
 export type Subsystem = 'identity' | 'verification' | 'state' | 'memory' | 'constraints';
@@ -51,34 +51,13 @@ function parseMapperResponse(text: string): FileMapping[] {
   }
 }
 
-export async function mapFiles(mdFiles: RepoFile[], apiKey: string): Promise<FileMapping[]> {
+export async function mapFiles(mdFiles: RepoFile[], provider: LLMProvider): Promise<FileMapping[]> {
   if (mdFiles.length === 0) return [];
-
-  const client = new Anthropic({ apiKey });
 
   const fileList = mdFiles
     .map((f) => `- path: ${f.path}\n  preview: ${JSON.stringify(f.preview)}`)
     .join('\n');
 
-  const response = await client.messages.create({
-    model: 'claude-haiku-4-5-20251001',
-    max_tokens: 1024,
-    system: [
-      {
-        type: 'text',
-        text: MAPPER_SYSTEM,
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
-    messages: [
-      {
-        role: 'user',
-        content: `Classify these repository files:\n\n${fileList}`,
-      },
-    ],
-  });
-
-  const textBlock = response.content.find((b) => b.type === 'text');
-  if (!textBlock || textBlock.type !== 'text') return [];
-  return parseMapperResponse(textBlock.text);
+  const text = await provider.chat(MAPPER_SYSTEM, `Classify these repository files:\n\n${fileList}`, { fast: true });
+  return parseMapperResponse(text);
 }

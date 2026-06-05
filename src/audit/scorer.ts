@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type { LLMProvider } from '../utils/llm.js';
 import type { RepoFiles } from './loader.js';
 import type { FileMapping, Subsystem } from './mapper.js';
 import { crossRef } from './cross-ref.js';
@@ -91,10 +91,8 @@ function buildSubsystemContent(
 export async function scoreRepo(
   files: RepoFiles,
   mappings: FileMapping[],
-  apiKey: string,
+  provider: LLMProvider,
 ): Promise<ScoredResult> {
-  const client = new Anthropic({ apiKey });
-
   // Build per-subsystem content for the scoring prompt
   const subsystemContents = SUBSYSTEMS.map((s) => ({
     subsystem: s,
@@ -108,28 +106,13 @@ export async function scoreRepo(
     })
     .join('\n\n');
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-6',
-    max_tokens: 2048,
-    system: [
-      {
-        type: 'text',
-        text: SCORER_SYSTEM,
-        cache_control: { type: 'ephemeral' },
-      },
-    ],
-    messages: [
-      {
-        role: 'user',
-        content: `Score this repository's AI harness across all 5 subsystems:\n\n${contentSections}`,
-      },
-    ],
-  });
+  const text = await provider.chat(
+    SCORER_SYSTEM,
+    `Score this repository's AI harness across all 5 subsystems:\n\n${contentSections}`,
+    { fast: false },
+  );
 
-  const textBlock = response.content.find((b) => b.type === 'text');
-  const llmScores = textBlock && textBlock.type === 'text'
-    ? parseScorerResponse(textBlock.text)
-    : {};
+  const llmScores = parseScorerResponse(text);
 
   function toSubsystemScore(key: Subsystem): SubsystemScore {
     const entry = llmScores[key];

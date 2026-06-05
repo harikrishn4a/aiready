@@ -1,49 +1,33 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { mapFiles } from '../src/audit/mapper';
+import type { LLMProvider } from '../src/utils/llm';
 import type { RepoFile } from '../src/audit/loader';
 
-vi.mock('@anthropic-ai/sdk', () => {
-  const mockCreate = vi.fn();
-  const MockAnthropic = vi.fn().mockImplementation(() => ({
-    messages: { create: mockCreate },
-  }));
-  (MockAnthropic as unknown as { _mockCreate: typeof mockCreate })._mockCreate = mockCreate;
-  return { default: MockAnthropic };
-});
-
-async function getCreate() {
-  const sdk = await import('@anthropic-ai/sdk');
-  const Cls = sdk.default as unknown as { _mockCreate: ReturnType<typeof vi.fn> };
-  return Cls._mockCreate;
+function makeProvider(response: string): LLMProvider {
+  return { chat: vi.fn().mockResolvedValue(response) };
 }
 
 function makeFile(path: string, preview = '# Content'): RepoFile {
   return { path, name: path.split('/').pop() ?? path, preview, fullContent: preview };
 }
 
-const TEST_KEY = 'test-key';
-
 describe('mapFiles — basic behaviour', () => {
-  it('returns empty array for empty file list', async () => {
-    expect(await mapFiles([], TEST_KEY)).toEqual([]);
+  it('returns empty array for empty file list without calling provider', async () => {
+    const provider = makeProvider('{}');
+    expect(await mapFiles([], provider)).toEqual([]);
+    expect(provider.chat).not.toHaveBeenCalled();
   });
 
-  it('returns parsed mappings from LLM response', async () => {
-    const create = await getCreate();
-    create.mockResolvedValue({
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          mappings: [
-            { path: 'AGENTS.md', subsystems: ['identity', 'constraints'] },
-            { path: 'PROGRESS.md', subsystems: ['state'] },
-          ],
-        }),
-      }],
-    });
+  it('returns parsed mappings from provider response', async () => {
+    const provider = makeProvider(JSON.stringify({
+      mappings: [
+        { path: 'AGENTS.md', subsystems: ['identity', 'constraints'] },
+        { path: 'PROGRESS.md', subsystems: ['state'] },
+      ],
+    }));
 
     const files = [makeFile('AGENTS.md'), makeFile('PROGRESS.md')];
-    const result = await mapFiles(files, TEST_KEY);
+    const result = await mapFiles(files, provider);
 
     expect(result).toHaveLength(2);
     expect(result[0]?.path).toBe('AGENTS.md');
@@ -53,74 +37,49 @@ describe('mapFiles — basic behaviour', () => {
     expect(result[1]?.subsystems).toContain('state');
   });
 
-  it('uses claude-haiku-4-5-20251001 model', async () => {
-    const create = await getCreate();
-    create.mockResolvedValue({ content: [{ type: 'text', text: '{"mappings":[]}' }] });
-    await mapFiles([makeFile('README.md')], TEST_KEY);
-    const call = create.mock.calls[0] as [{ model: string }];
-    expect(call[0].model).toBe('claude-haiku-4-5-20251001');
+  it('calls provider.chat with fast: true', async () => {
+    const provider = makeProvider('{"mappings":[]}');
+    await mapFiles([makeFile('README.md')], provider);
+    expect(provider.chat).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      { fast: true },
+    );
   });
 });
 
 describe('mapFiles — invalid LLM responses', () => {
-  beforeEach(async () => {
-    vi.clearAllMocks();
+  it('returns empty array when provider returns invalid JSON', async () => {
+    expect(await mapFiles([makeFile('README.md')], makeProvider('not json'))).toEqual([]);
   });
 
-  it('returns empty array when LLM returns invalid JSON', async () => {
-    const create = await getCreate();
-    create.mockResolvedValue({ content: [{ type: 'text', text: 'not json' }] });
-    const result = await mapFiles([makeFile('README.md')], TEST_KEY);
-    expect(result).toEqual([]);
-  });
-
-  it('returns empty array when LLM returns JSON without mappings', async () => {
-    const create = await getCreate();
-    create.mockResolvedValue({ content: [{ type: 'text', text: '{"error": "unknown"}' }] });
-    const result = await mapFiles([makeFile('README.md')], TEST_KEY);
-    expect(result).toEqual([]);
+  it('returns empty array when provider returns JSON without mappings', async () => {
+    expect(await mapFiles([makeFile('README.md')], makeProvider('{"error":"unknown"}'))).toEqual([]);
   });
 
   it('filters out unknown subsystem values', async () => {
-    const create = await getCreate();
-    create.mockResolvedValue({
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          mappings: [{ path: 'file.md', subsystems: ['identity', 'bogus', 'fake'] }],
-        }),
-      }],
-    });
-    const result = await mapFiles([makeFile('file.md')], TEST_KEY);
+    const provider = makeProvider(JSON.stringify({
+      mappings: [{ path: 'file.md', subsystems: ['identity', 'bogus', 'fake'] }],
+    }));
+    const result = await mapFiles([makeFile('file.md')], provider);
     expect(result[0]?.subsystems).toEqual(['identity']);
   });
 
   it('omits entries where all subsystems were invalid', async () => {
-    const create = await getCreate();
-    create.mockResolvedValue({
-      content: [{
-        type: 'text',
-        text: JSON.stringify({
-          mappings: [{ path: 'file.md', subsystems: ['bogus'] }],
-        }),
-      }],
-    });
-    const result = await mapFiles([makeFile('file.md')], TEST_KEY);
-    expect(result).toHaveLength(0);
+    const provider = makeProvider(JSON.stringify({
+      mappings: [{ path: 'file.md', subsystems: ['bogus'] }],
+    }));
+    expect(await mapFiles([makeFile('file.md')], provider)).toHaveLength(0);
   });
 });
 
 describe('mapFiles — prompt includes file info', () => {
   it('includes file path and preview in user message', async () => {
-    const create = await getCreate();
-    create.mockClear();
-    create.mockResolvedValue({ content: [{ type: 'text', text: '{"mappings":[]}' }] });
-    const files = [makeFile('AGENTS.md', '# AI Agents\nThis project...')];
-    await mapFiles(files, TEST_KEY);
+    const provider = makeProvider('{"mappings":[]}');
+    await mapFiles([makeFile('AGENTS.md', '# AI Agents\nThis project...')], provider);
 
-    const call = create.mock.calls[0] as [{ messages: Array<{ content: string }> }];
-    const userContent = call[0].messages[0]?.content ?? '';
-    expect(userContent).toContain('AGENTS.md');
-    expect(userContent).toContain('AI Agents');
+    const [, userMsg] = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0] as [string, string];
+    expect(userMsg).toContain('AGENTS.md');
+    expect(userMsg).toContain('AI Agents');
   });
 });

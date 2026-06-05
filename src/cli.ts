@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import { Command } from 'commander';
 import { runAudit } from './audit/index.js';
 
@@ -14,10 +15,14 @@ program
   .option('-t, --target <dir>', 'target directory to audit', '.')
   .option('--json', 'output results as JSON', false)
   .option('--min-score <n>', 'exit 1 if overall score is below this threshold', '70')
-  .action((opts: { target: string; json: boolean; minScore: string }) => {
+  .option('--provider <name>', 'LLM provider: anthropic | openai | ollama (skips prompt)')
+  .option('--model <tier>', 'model tier: fast | quality (skips prompt)')
+  .action((opts: { target: string; json: boolean; minScore: string; provider?: string; model?: string }) => {
     runAudit(opts.target, {
       json: opts.json,
       minScore: parseInt(opts.minScore, 10),
+      provider: opts.provider,
+      model: opts.model,
     }).catch((err: unknown) => {
       process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);

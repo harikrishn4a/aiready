@@ -1,31 +1,47 @@
-# TASK.md — Sprint Contract
+# TASK.md — feat-007: Provider abstraction, interactive selection, dotenv
 
 ## Feature
-- ID: feat-005
-- Title: Stage 1 integration — end-to-end audit verification
+feat-007 — Add LLMProvider abstraction so aiready audit works with Anthropic, OpenAI, or Ollama.
 
-## Scope — what will change
-- test-fixtures/good-repo/ — well-harnessed fixture repo
-- test-fixtures/bare-repo/ — minimal fixture repo
-- tests/integration.test.ts — end-to-end tests
+## Scope
+New files:
+- src/utils/llm.ts         — LLMProvider interface + AnthropicProvider + OpenAIProvider + OllamaProvider
+- src/utils/prompt.ts      — interactive provider/model selection + API key gate
+- .env.example
+- tests/llm.test.ts
+- tests/prompt.test.ts
 
-## Exclusions — what will NOT change
-- No src/ changes
-- examples/ directory not modified
+Modified files:
+- src/audit/mapper.ts      — swap apiKey: string for provider: LLMProvider
+- src/audit/scorer.ts      — swap apiKey: string for provider: LLMProvider
+- src/audit/index.ts       — wire selectAuditConfig + createProvider, remove old key guard
+- src/cli.ts               — add dotenv/config import, --provider and --model flags
+- tests/mapper.test.ts     — replace mockCreate pattern with mock LLMProvider
+- tests/scorer.test.ts     — same
+- tests/integration.test.ts — same
+- package.json             — add dotenv, @inquirer/prompts, openai
+
+## Out of scope
+- No changes to loader.ts, reporter.ts, cross-ref.ts, fs.ts
 - No Stage 2 work
 
-## Verification standard
-- npm run build
-- npm test (including integration tests)
-- npm run typecheck
-- npm run lint
-- node dist/cli.js audit --target test-fixtures/good-repo scores > 70
-- node dist/cli.js audit --target test-fixtures/bare-repo scores < 30
-- node dist/cli.js audit --target test-fixtures/bare-repo exits with code 1
-- node dist/cli.js audit --target test-fixtures/good-repo --json outputs valid JSON
+## Pass criteria
+- npm run build: zero errors
+- npm run typecheck: zero errors
+- npm run lint: clean
+- npm test: all tests pass (86+ tests)
+- node dist/cli.js audit without key → exits 1 with ERROR/WHY/FIX
+- node dist/cli.js audit --provider anthropic --model fast (with key set) → skips prompts
+- node dist/cli.js audit --provider ollama → runs without API key
 
-## Acceptance criteria
-- good-repo fixture scores > 70 via pipeline AND via CLI binary
-- bare-repo fixture scores < 30 via pipeline
-- --min-score flag causes exit 1 when score is below threshold
-- --json outputs parseable JSON with the expected schema
+## Implementation order
+1. Install deps
+2. .env.example + .gitignore
+3. src/utils/llm.ts
+4. src/utils/prompt.ts
+5. Update mapper.ts + scorer.ts signatures
+6. Update index.ts
+7. Update cli.ts
+8. Update tests (mapper, scorer, integration)
+9. New tests (llm.test.ts, prompt.test.ts)
+10. Verify

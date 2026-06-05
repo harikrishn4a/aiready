@@ -82,3 +82,23 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Using raw `fetch` against the Anthropic API — avoids the dependency but loses typed responses, retry logic, and prompt caching helpers that the SDK provides.
 - **Constraints introduced**: The SDK must not be imported anywhere in Stage 1 code paths that existed before this decision (cross-ref.ts, loader.ts — these remain LLM-free). Only mapper.ts and scorer.ts import the SDK.
 - **Revisit when**: A lighter-weight alternative to the full SDK is available, or when the project moves to ESM and needs to re-evaluate bundling.
+
+---
+
+### 2026-06-05: LLM calls routed through user's own API keys
+
+- Decision: AIReady makes its own LLM calls using keys from .env
+- Reason: No stable programmatic interface exists to piggyback on Claude Code, Cursor, or other agent sessions
+- Constraints introduced: users need their own API key to use Stage 1+
+- Future option: MCP server mode where Claude Code invokes AIReady as a tool and does the LLM reasoning itself — no API key needed
+
+---
+
+### 2026-06-05: Provider abstraction — LLMProvider interface in src/utils/llm.ts
+
+- **Decision**: Introduce a thin `LLMProvider` interface (`chat(system, user, opts?) → Promise<string>`) that decouples mapper.ts and scorer.ts from any specific SDK. Ship three implementations: `AnthropicProvider`, `OpenAIProvider`, `OllamaProvider`. Expose `--provider` and `--model` CLI flags; show interactive selection via `@inquirer/prompts` when flags are omitted.
+- **Reason**: The prompts in mapper.ts and scorer.ts are provider-agnostic text. The only Anthropic-specific coupling was the SDK import and model IDs. Abstracting behind one interface lets users choose Anthropic, OpenAI, Groq (via `OPENAI_BASE_URL`), or Ollama with no code changes. Prompt caching is preserved for Anthropic; OpenAI-compatible endpoints (including Ollama) route through the `openai` package.
+- **Rejected alternatives**: A plugin system with dynamically loaded provider packages — correct for an ecosystem but excessive overhead for three first-class providers.
+- **Constraints introduced**: `llm.ts` is the ONLY file that imports `@anthropic-ai/sdk` or `openai`. `mapper.ts` and `scorer.ts` must accept `LLMProvider`, never a raw API key. New providers must implement `LLMProvider` fully before being passed to `createProvider`.
+- **Revisit when**: A user requests a provider not covered by the OpenAI-compatible adapter pattern (e.g., Google Gemini native API, Mistral native API).
+- Revisit when: Claude Code publishes a stable subprocess API, or when MCP adoption is broad enough to justify building a parallel MCP interface

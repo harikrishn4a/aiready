@@ -1,12 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 21.09 KB (full pipeline bundled)
-- Tests: 86/86 passing (7 test files)
+- Build: passing — dist/cli.js 25.73 KB (full pipeline bundled)
+- Tests: 112/112 passing (9 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **Stage 1 LLM rebuild complete**
+- Active feature: none — **feat-007 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -19,9 +19,10 @@
 - [x] **feat-004** — Reporter: terminal bar-chart output + JSON mode; audit pipeline wired end-to-end
 - [x] **feat-005** — Integration: good-repo scores 100/100, bare-repo scores 0/100, all CLI flags verified
 - [x] **feat-006** — LLM-powered audit rebuild: mapper.ts (Haiku classifies md files → subsystems), scorer.ts (Sonnet scores quality per subsystem), reporter.ts (file attribution), ANTHROPIC_API_KEY guard
+- [x] **feat-007** — Provider abstraction: LLMProvider interface, AnthropicProvider + OpenAIProvider + OllamaProvider, interactive --provider/--model selection, dotenv, .env.example
 
 ## In progress
-- nothing — Stage 1 LLM rebuild complete
+- nothing — feat-007 complete
 
 ## Blocked
 - nothing

@@ -189,6 +189,34 @@
       ],
       "agent_notes": "mapper.ts uses claude-haiku-4-5-20251001; scorer.ts uses claude-sonnet-4-6 with prompt caching. Tests mock @anthropic-ai/sdk. examples/ fixtures: good-repo, bare-repo, misnamed-repo. Removed spawnSync tests that required real LLM; kept CLI binary tests for key guard, --version, --help.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-007",
+      "priority": 7,
+      "area": "utils",
+      "title": "Provider abstraction with interactive selection and dotenv",
+      "user_visible_behavior": "aiready audit works with Anthropic, OpenAI, or Ollama; --provider/--model flags skip prompts; .env loaded automatically; missing key shows ERROR/WHY/FIX with provider-specific URL and Ollama suggestion",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint",
+        "node dist/cli.js audit --provider anthropic --model fast (no key) → exits 1 with ERROR/WHY/FIX",
+        "node dist/cli.js audit --help → shows --provider and --model flags"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 25.73 KB, zero errors",
+        "npm test: 112/112 (9 test files: cross-ref 14, mapper 8, scorer 11, prompt 10, reporter 16, llm 15, loader 22, cli 2, integration 14)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "node dist/cli.js audit --provider anthropic --model fast (no key): exit 1 — ERROR/WHY/FIX with console.anthropic.com URL and Ollama suggestion",
+        "node dist/cli.js audit --help: shows --provider and --model flags",
+        "DECISIONS.md: new entry dated 2026-06-05 (provider abstraction)"
+      ],
+      "agent_notes": "llm.ts is the ONLY file importing @anthropic-ai/sdk or openai. mapper.ts and scorer.ts now accept LLMProvider. OllamaProvider uses openai package with custom baseURL. OpenAIProvider reads OPENAI_BASE_URL for Groq/Azure/proxy support. Tests mock both SDKs only in llm.test.ts; all other tests use mock LLMProvider objects.",
+      "last_updated": "2026-06-05"
     }
   ]
 }
