@@ -1,4 +1,4 @@
-import type { ScoredResult } from './scorer.js';
+import type { ScoredResult, SubsystemScore } from './scorer.js';
 import type { RemediationPlan } from './remediation.js';
 
 export interface ReportOptions {
@@ -20,14 +20,26 @@ function abbreviateFiles(files: string[]): string {
   return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
 }
 
-function subsystemLines(name: string, score: number, gaps: string[], files: string[]): string[] {
-  const scoreStr = String(score).padStart(3);
-  const summary = gaps.length > 0 ? gaps[0] : 'All checks passed';
-  return [
-    `${name.padEnd(14)} ${scoreStr}  ${bar(score)}`,
-    `  Files: ${abbreviateFiles(files)}`,
-    `  Note: ${summary}`,
+function subsystemLines(name: string, sub: SubsystemScore): string[] {
+  const scoreStr = String(sub.score).padStart(3);
+  const summary = sub.gaps.length > 0 ? sub.gaps[0] : 'All checks passed';
+  const lines: string[] = [
+    `${name.padEnd(14)} ${scoreStr}  ${bar(sub.score)}`,
+    `  Files: ${abbreviateFiles(sub.files)}`,
   ];
+
+  const present = sub.presentSections?.length ?? 0;
+  const missing = sub.missingSections?.length ?? 0;
+  if (present + missing > 0) {
+    const missingNames = sub.missingSections?.slice(0, 3) ?? [];
+    const missingPart = missing > 0
+      ? ` — missing: ${missingNames.join(', ')}${missing > 3 ? '…' : ''}`
+      : '';
+    lines.push(`  Sections: ${present}/${present + missing}${missingPart}`);
+  }
+
+  lines.push(`  Note: ${summary}`);
+  return lines;
 }
 
 function getRecommendation(scored: ScoredResult): string {
@@ -101,11 +113,11 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
   lines.push(`AI Readiness: ${scored.overall}/100`);
   lines.push('');
   const subsystemBlocks = [
-    subsystemLines('identity', scored.identity.score, scored.identity.gaps, scored.identity.files),
-    subsystemLines('verification', scored.verification.score, scored.verification.gaps, scored.verification.files),
-    subsystemLines('state', scored.state.score, scored.state.gaps, scored.state.files),
-    subsystemLines('memory', scored.memory.score, scored.memory.gaps, scored.memory.files),
-    subsystemLines('constraints', scored.constraints.score, scored.constraints.gaps, scored.constraints.files),
+    subsystemLines('identity', scored.identity),
+    subsystemLines('verification', scored.verification),
+    subsystemLines('state', scored.state),
+    subsystemLines('memory', scored.memory),
+    subsystemLines('constraints', scored.constraints),
   ];
   for (const [idx, block] of subsystemBlocks.entries()) {
     if (idx > 0) lines.push('');

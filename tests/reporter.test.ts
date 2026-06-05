@@ -110,6 +110,26 @@ describe('report — terminal output', () => {
     report(makeScored({ memory: { score: 0, gaps: ['No ARCHITECTURE.md'], files: [] } }), { json: false });
     expect(output.length).toBeGreaterThan(100);
   });
+
+  it('prints section coverage when presentSections and missingSections are available', () => {
+    report(makeScored({
+      identity: {
+        score: 70, gaps: [], files: ['AGENTS.md'],
+        structuralScore: 70, contentScore: 70,
+        presentSections: ['Stack', 'Verification commands', 'Repo structure'],
+        missingSections: ['Current stage', 'Completion gate'],
+        isHarnessArtifact: true,
+        findings: [],
+      },
+    }), { json: false });
+    expect(output).toContain('Sections: 3/5');
+    expect(output).toContain('missing: Current stage, Completion gate');
+  });
+
+  it('omits Sections line when no template data available', () => {
+    report(makeScored(), { json: false });
+    expect(output).not.toContain('Sections:');
+  });
 });
 
 describe('report — JSON output', () => {
