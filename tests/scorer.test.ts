@@ -5,7 +5,10 @@ import type { RepoFiles } from '../src/audit/loader';
 import type { FileMapping } from '../src/audit/mapper';
 
 function makeProvider(response: object): LLMProvider {
-  return { chat: vi.fn().mockResolvedValue(JSON.stringify(response)) };
+  return {
+    chat: vi.fn().mockResolvedValue(JSON.stringify(response)),
+    getTotalTokens: () => 0,
+  };
 }
 
 function makeFiles(overrides: Partial<RepoFiles> = {}): RepoFiles {
@@ -128,7 +131,10 @@ describe('scoreRepo — provider interaction', () => {
   });
 
   it('returns 0 scores when provider returns invalid JSON', async () => {
-    const provider: LLMProvider = { chat: vi.fn().mockResolvedValue('sorry, cannot help') };
+    const provider: LLMProvider = {
+      chat: vi.fn().mockResolvedValue('sorry, cannot help'),
+      getTotalTokens: () => 0,
+    };
     const result = await scoreRepo(makeFiles(), [], provider);
     expect(result.identity.score).toBe(0);
     expect(result.overall).toBe(0);

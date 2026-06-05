@@ -2,6 +2,7 @@ import type { ScoredResult } from './scorer.js';
 
 export interface ReportOptions {
   json: boolean;
+  tokenUsage?: number;
 }
 
 function bar(score: number): string {
@@ -72,6 +73,7 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
   if (opts.json) {
     const out = {
       overall: scored.overall,
+      ...(opts.tokenUsage !== undefined ? { token_usage: opts.tokenUsage } : {}),
       subsystems: {
         identity: { score: scored.identity.score, gaps: scored.identity.gaps, files: scored.identity.files },
         verification: { score: scored.verification.score, gaps: scored.verification.gaps, files: scored.verification.files },

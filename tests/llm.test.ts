@@ -86,6 +86,17 @@ describe('AnthropicProvider — default routing', () => {
     create.mockResolvedValue({ content: [{ type: 'text', text: 'hello world' }] });
     expect(await new AnthropicProvider('key').chat('sys', 'user')).toBe('hello world');
   });
+
+  it('accumulates estimated input and output tokens across calls', async () => {
+    const create = await getAnthropicCreate();
+    create
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'abcd' }] })
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'ab' }] });
+    const provider = new AnthropicProvider('key');
+    await provider.chat('abcd', 'abcd');
+    await provider.chat('ab', 'ab');
+    expect(provider.getTotalTokens()).toBe(6);
+  });
 });
 
 describe('AnthropicProvider — explicit modelId override', () => {

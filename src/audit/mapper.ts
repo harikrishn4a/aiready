@@ -8,6 +8,20 @@ export interface FileMapping {
   subsystems: Subsystem[];
 }
 
+const TRIAGE_SYSTEM = `You are a repository analyst. Given a list of files with short previews,
+identify which files could plausibly serve as harness artifacts for AI
+coding agents.
+
+Harness artifacts include: agent instructions, project progress tracking,
+architecture documentation, constraints or rules, session state,
+design decisions.
+
+Exclude: changelogs, license files, generated API docs, package readmes,
+dependency documentation, test fixtures, lock files.
+
+Respond with valid JSON only:
+{ "relevant": ["path/to/file.md", ...] }`;
+
 const MAPPER_SYSTEM = `You are classifying repository markdown files by AI agent harness subsystem.
 
 There are exactly 5 subsystems:
@@ -23,6 +37,10 @@ A file can belong to multiple subsystems. Omit files with no harness relevance.
 Return ONLY valid JSON with no explanation:
 {"mappings":[{"path":"file.md","subsystems":["identity"]}]}`;
 
+interface TriageResponse {
+  relevant: string[];
+}
+
 interface MapperResponse {
   mappings: Array<{ path: string; subsystems: string[] }>;
 }
@@ -30,6 +48,22 @@ interface MapperResponse {
 const VALID_SUBSYSTEMS = new Set<Subsystem>([
   'identity', 'verification', 'state', 'memory', 'constraints',
 ]);
+
+function firstLines(content: string, lineCount: number): string {
+  return content.split('\n').slice(0, lineCount).join('\n');
+}
+
+function parseTriageResponse(text: string): string[] {
+  try {
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return [];
+    const parsed = JSON.parse(jsonMatch[0]) as TriageResponse;
+    if (!Array.isArray(parsed.relevant)) return [];
+    return parsed.relevant.filter((p): p is string => typeof p === 'string');
+  } catch {
+    return [];
+  }
+}
 
 function parseMapperResponse(text: string): FileMapping[] {
   try {
@@ -51,13 +85,44 @@ function parseMapperResponse(text: string): FileMapping[] {
   }
 }
 
+async function triageFiles(mdFiles: RepoFile[], provider: LLMProvider): Promise<string[]> {
+  const fileList = mdFiles
+    .map((f) => `- path: ${f.path}\n  preview: ${JSON.stringify(firstLines(f.fullContent, 5))}`)
+    .join('\n');
+
+  const text = await provider.chat(
+    TRIAGE_SYSTEM,
+    `Identify harness-relevant files:\n\n${fileList}`,
+    { fast: true },
+  );
+  return parseTriageResponse(text);
+}
+
+async function classifyFiles(
+  relevantFiles: RepoFile[],
+  provider: LLMProvider,
+): Promise<FileMapping[]> {
+  const fileList = relevantFiles
+    .map((f) => `- path: ${f.path}\n  preview: ${JSON.stringify(firstLines(f.fullContent, 50))}`)
+    .join('\n');
+
+  const text = await provider.chat(
+    MAPPER_SYSTEM,
+    `Classify these repository files:\n\n${fileList}`,
+    { fast: true },
+  );
+  return parseMapperResponse(text);
+}
+
 export async function mapFiles(mdFiles: RepoFile[], provider: LLMProvider): Promise<FileMapping[]> {
   if (mdFiles.length === 0) return [];
 
-  const fileList = mdFiles
-    .map((f) => `- path: ${f.path}\n  preview: ${JSON.stringify(f.preview)}`)
-    .join('\n');
+  const relevantPaths = await triageFiles(mdFiles, provider);
+  if (relevantPaths.length === 0) return [];
 
-  const text = await provider.chat(MAPPER_SYSTEM, `Classify these repository files:\n\n${fileList}`, { fast: true });
-  return parseMapperResponse(text);
+  const pathSet = new Set(relevantPaths);
+  const relevantFiles = mdFiles.filter((f) => pathSet.has(f.path));
+  if (relevantFiles.length === 0) return [];
+
+  return classifyFiles(relevantFiles, provider);
 }

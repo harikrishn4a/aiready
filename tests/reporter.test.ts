@@ -154,6 +154,13 @@ describe('report — JSON output', () => {
     const parsed = JSON.parse(output) as { subsystems: { identity: { files: string[] } } };
     expect(Array.isArray(parsed.subsystems.identity.files)).toBe(true);
   });
+
+  it('JSON includes token_usage when provided', () => {
+    report(makeScored({ overall: 61 }), { json: true, tokenUsage: 8123 });
+    const parsed = JSON.parse(output) as { token_usage: number; overall: number };
+    expect(parsed.token_usage).toBe(8123);
+    expect(parsed.overall).toBe(61);
+  });
 });
 
 describe('bar rendering', () => {

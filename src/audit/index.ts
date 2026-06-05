@@ -21,7 +21,14 @@ export async function runAudit(target: string, opts: AuditOptions): Promise<void
   const files = loadRepo(targetDir);
   const mappings = await mapFiles(files.mdFiles, provider);
   const scored = await scoreRepo(files, mappings, provider);
-  report(scored, { json: opts.json });
+  const totalTokens = provider.getTotalTokens();
+  report(scored, { json: opts.json, tokenUsage: totalTokens });
+
+  if (!opts.json) {
+    const display =
+      totalTokens >= 1000 ? `~${Math.ceil(totalTokens / 1000)}k` : `~${totalTokens}`;
+    console.log(`\nTokens used: ${display}`);
+  }
 
   if (scored.overall < opts.minScore) {
     process.exit(1);

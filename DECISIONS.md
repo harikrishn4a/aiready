@@ -112,3 +112,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Hardcode both providers — stale OpenAI list on every new model release. Fetch both dynamically — Anthropic has no equivalent endpoint.
 - **Constraints introduced**: `listOpenAIModels()` lives in `llm.ts` (the SDK boundary file) and is the only place that calls `client.models.list()`. `models.ts` exports `ANTHROPIC_MODELS` and `OPENAI_FALLBACK_MODELS`; model ID updates require editing only that file. `AuditConfig.modelId` is now a raw string (the chosen model ID), not a tier enum — the tier-routing logic lives entirely inside each provider's `chat()` method.
 - **Revisit when**: Anthropic adds a public model discovery endpoint, or the fallback model list becomes noticeably stale.
+
+---
+
+### 2026-06-05: Two-stage mapper triage to reduce token usage
+
+- **Decision**: Split `mapFiles()` into two fast-model calls — triage (all file names + 5-line previews) then classification (50-line previews of triaged files only). Log cumulative estimated tokens at end of audit via `LLMProvider.getTotalTokens()`.
+- **Reason**: Large repos exceeded TPM limits when all file previews were sent in one batched mapper call. Triage cheaply filters harness-relevant files before the heavier classification step. Full content still flows to scorer for mapped files only.
+- **Rejected alternatives**: tiktoken for exact counts — adds dependency and bundle size for logging-only use. Single-call with smaller previews only — loses classification accuracy on structure-heavy docs.
+- **Constraints introduced**: `estimateTokens()` lives in `tokens.ts` (chars/4 heuristic). Token counter is session-scoped per provider instance. JSON audit output includes `token_usage` field.
+- **Revisit when**: Provider APIs expose exact usage metadata worth switching from estimates, or triage accuracy proves insufficient on real repos.

@@ -241,6 +241,29 @@
       ],
       "agent_notes": "models.ts is the single source for ANTHROPIC_MODELS and OPENAI_FALLBACK_MODELS. listOpenAIModels() in llm.ts fetches live, filters gpt-* chat models, sorts newest-first, returns fallback on any error. AuditConfig.modelId replaces modelTier — tier routing is internal to each provider's chat() method.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-009",
+      "priority": 9,
+      "area": "audit",
+      "title": "Two-stage mapper triage + token usage logging",
+      "user_visible_behavior": "Large repos triage files with 5-line previews before classification with 50-line previews; audit ends with Tokens used: ~Nk; --json includes token_usage",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 29.98 KB, zero errors",
+        "npm test: 131/131 (10 test files: tokens 3, mapper 8, llm 28, reporter 17, ...)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean"
+      ],
+      "agent_notes": "mapper.ts: triageFiles() then classifyFiles(). tokens.ts: estimateTokens(). LLMProvider.getTotalTokens() on all providers. index.ts logs Tokens used after report; reporter JSON includes token_usage.",
+      "last_updated": "2026-06-05"
     }
   ]
 }

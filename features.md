@@ -141,3 +141,26 @@ End-to-end verification that the audit command works correctly against real repo
 
 **Out of scope:**
 - Stage 2 (init) work
+
+---
+
+## feat-009: Two-stage mapper triage + token logging
+
+**What the user sees:**
+Audit completes without TPM blowups on large repos. Terminal shows `Tokens used: ~8k` at end. JSON output includes `token_usage`.
+
+**Tasks:**
+- [x] `src/utils/tokens.ts` — `estimateTokens()` (chars/4, no tiktoken)
+- [x] `LLMProvider.getTotalTokens()` on Anthropic, OpenAI, Ollama providers
+- [x] `mapper.ts` — triage (5-line previews) then classify (50-line previews)
+- [x] `index.ts` — log token total after report; pass to JSON output
+- [x] Tests: tokens, mapper two-stage, llm token counter, reporter token_usage
+
+**Acceptance criteria:**
+- `npm run build && npm test && npm run typecheck && npm run lint` all pass
+- Empty triage result skips classification and returns empty mappings
+- Full file content still flows to scorer for mapped files only
+
+**Out of scope:**
+- Stage 2 (init) work
+- Changes to loader.ts, scorer.ts, cli.ts

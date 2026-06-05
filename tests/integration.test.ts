@@ -23,7 +23,21 @@ function spawnCli(args: string[], env?: NodeJS.ProcessEnv): ReturnType<typeof sp
 }
 
 function makeProvider(scores: object): LLMProvider {
-  return { chat: vi.fn().mockResolvedValue(JSON.stringify(scores)) };
+  return {
+    chat: vi.fn().mockResolvedValue(JSON.stringify(scores)),
+    getTotalTokens: () => 0,
+  };
+}
+
+function makeMapperProvider(mappings: object): LLMProvider {
+  return {
+    chat: vi.fn()
+      .mockResolvedValueOnce(JSON.stringify({
+        relevant: (mappings as { mappings: Array<{ path: string }> }).mappings.map((m) => m.path),
+      }))
+      .mockResolvedValueOnce(JSON.stringify(mappings)),
+    getTotalTokens: () => 0,
+  };
 }
 
 function goodScores() {
@@ -68,13 +82,13 @@ describe('pipeline: good-repo scoring (mocked provider)', () => {
   it('scores above 70', async () => {
     const provider = makeProvider(goodScores());
     const files = loadRepo(goodRepo);
-    const mappings = await mapFiles(files.mdFiles, makeProvider(JSON.stringify({
+    const mappings = await mapFiles(files.mdFiles, makeMapperProvider({
       mappings: [
         { path: 'AGENTS.md', subsystems: ['identity', 'verification', 'constraints'] },
         { path: 'ARCHITECTURE.md', subsystems: ['memory'] },
         { path: 'PROGRESS.md', subsystems: ['state'] },
       ],
-    })));
+    }));
     const scored = await scoreRepo(files, mappings, provider);
     expect(scored.overall).toBeGreaterThan(70);
   });
@@ -97,7 +111,7 @@ describe('pipeline: bare-repo scoring (mocked provider)', () => {
   it('scores below 30', async () => {
     const provider = makeProvider(bareScores());
     const files = loadRepo(bareRepo);
-    const mappings = await mapFiles(files.mdFiles, makeProvider('{"mappings":[]}'));
+    const mappings = await mapFiles(files.mdFiles, makeProvider(JSON.stringify({ relevant: [] })));
     const scored = await scoreRepo(files, mappings, provider);
     expect(scored.overall).toBeLessThan(30);
   });

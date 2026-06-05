@@ -2,9 +2,15 @@ import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import type { ModelDef } from './models.js';
 import { OPENAI_FALLBACK_MODELS } from './models.js';
+import { estimateTokens } from './tokens.js';
 
 export interface LLMProvider {
   chat(system: string, user: string, opts?: { fast?: boolean }): Promise<string>;
+  getTotalTokens(): number;
+}
+
+function estimateChatTokens(system: string, user: string, response: string): number {
+  return estimateTokens(system) + estimateTokens(user) + estimateTokens(response);
 }
 
 export type ProviderName = 'anthropic' | 'openai' | 'ollama';
@@ -18,10 +24,15 @@ const ANTHROPIC_QUALITY = 'claude-sonnet-4-6';
 export class AnthropicProvider implements LLMProvider {
   private client: Anthropic;
   private modelId: string | undefined;
+  private totalTokens = 0;
 
   constructor(apiKey: string, modelId?: string) {
     this.client = new Anthropic({ apiKey });
     this.modelId = modelId;
+  }
+
+  getTotalTokens(): number {
+    return this.totalTokens;
   }
 
   async chat(system: string, user: string, opts?: { fast?: boolean }): Promise<string> {
@@ -35,7 +46,9 @@ export class AnthropicProvider implements LLMProvider {
       messages: [{ role: 'user', content: user }],
     });
     const block = response.content.find((b) => b.type === 'text');
-    return block && block.type === 'text' ? block.text : '';
+    const text = block && block.type === 'text' ? block.text : '';
+    this.totalTokens += estimateChatTokens(system, user, text);
+    return text;
   }
 }
 
@@ -47,11 +60,16 @@ const OPENAI_QUALITY = 'gpt-4o';
 export class OpenAIProvider implements LLMProvider {
   private client: OpenAI;
   private modelId: string | undefined;
+  private totalTokens = 0;
 
   constructor(apiKey: string, modelId?: string) {
     const baseURL = process.env['OPENAI_BASE_URL'];
     this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
     this.modelId = modelId;
+  }
+
+  getTotalTokens(): number {
+    return this.totalTokens;
   }
 
   async chat(system: string, user: string, opts?: { fast?: boolean }): Promise<string> {
@@ -63,7 +81,9 @@ export class OpenAIProvider implements LLMProvider {
         { role: 'user', content: user },
       ],
     });
-    return response.choices[0]?.message?.content ?? '';
+    const text = response.choices[0]?.message?.content ?? '';
+    this.totalTokens += estimateChatTokens(system, user, text);
+    return text;
   }
 }
 
@@ -72,6 +92,7 @@ export class OpenAIProvider implements LLMProvider {
 export class OllamaProvider implements LLMProvider {
   private client: OpenAI;
   private model: string;
+  private totalTokens = 0;
 
   constructor() {
     const host = process.env['OLLAMA_HOST'] ?? 'http://localhost:11434';
@@ -82,6 +103,10 @@ export class OllamaProvider implements LLMProvider {
     });
   }
 
+  getTotalTokens(): number {
+    return this.totalTokens;
+  }
+
   async chat(system: string, user: string): Promise<string> {
     const response = await this.client.chat.completions.create({
       model: this.model,
@@ -90,7 +115,9 @@ export class OllamaProvider implements LLMProvider {
         { role: 'user', content: user },
       ],
     });
-    return response.choices[0]?.message?.content ?? '';
+    const text = response.choices[0]?.message?.content ?? '';
+    this.totalTokens += estimateChatTokens(system, user, text);
+    return text;
   }
 }
 
