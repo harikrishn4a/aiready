@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import { Command } from 'commander';
 import { runAudit } from './audit/index.js';
+import { runInit } from './init/index.js';
 
 export const program = new Command();
 
@@ -23,6 +24,26 @@ program
       minScore: opts.minScore === undefined ? undefined : parseInt(opts.minScore, 10),
       provider: opts.provider,
       model: opts.model,
+    }).catch((err: unknown) => {
+      process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    });
+  });
+
+program
+  .command('init')
+  .description('Generate missing harness artifacts from audit plan')
+  .option('-t, --target <dir>', 'target directory', '.')
+  .option('--provider <name>', 'LLM provider: anthropic | openai | ollama (skips prompt)')
+  .option('--model <id>', 'model ID (e.g. claude-sonnet-4-6) — skips prompt')
+  .option('--force [filename]', 'overwrite existing files (all, or specific filename)')
+  .option('--dry-run', 'show what would be generated without writing')
+  .action((opts: { target: string; provider?: string; model?: string; force?: boolean | string; dryRun?: boolean }) => {
+    runInit(opts.target, {
+      provider: opts.provider,
+      model: opts.model,
+      force: opts.force,
+      dryRun: opts.dryRun,
     }).catch((err: unknown) => {
       process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);

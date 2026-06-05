@@ -260,6 +260,7 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
     lines.push('## Weak Artifacts');
     for (const item of plan.improve) {
       lines.push(`### ${item.filename}`);
+      lines.push(`- subsystem: ${item.subsystem}`);
       lines.push(`- score: ${item.score ?? 0}`);
       if (item.why) lines.push(`- why: ${item.why}`);
       lines.push(`- max_lines: ${item.max_lines}`);

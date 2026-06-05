@@ -1,43 +1,37 @@
-# TASK.md — feat-011: Graphify semantic query, strict scoring, agent remediation plan
+# TASK.md — feat-012: Stage 2 init command
 
-## Feature
-feat-011 — Improve Stage 1 audit as a durable audit-to-init contract while keeping Stage 2 unimplemented.
+## Feature ID
+feat-012
 
-## Scope
-New files:
-- src/audit/remediation.ts — generate/improve/source_context contract, markdown renderer, plan writer
-- src/utils/spinner.ts     — TTY-only sea-green loading spinner
-- tests/remediation.test.ts
-- tests/spinner.test.ts
+## Goal
+Implement `npx aiready init --target .` — reads `.aiready/plan.md` (written by Stage 1 audit),
+executes the remediation contract, and generates or improves missing harness artifacts using LLM.
 
-Modified files:
-- src/audit/loader.ts      — guaranteed harness files, semantic Graphify node-label matching, 6000-char content cap
-- src/audit/mapper.ts      — restore 5-line triage previews, keep 50-line classification previews
-- src/audit/scorer.ts      — strict course-aligned scoring criteria and findings shape
-- src/audit/reporter.ts    — readable CLI summary + JSON remediation
-- src/audit/index.ts       — build/write `.aiready/plan.md`, pass remediation to reporter, wrap LLM phases in spinner
-- tests/*                  — update helpers and add coverage for new contracts
+## Design principles
+- One artifact per LLM call — never batch multiple artifacts
+- Read source files fresh from disk before each call
+- Write each artifact before moving to the next
+- Re-run audit after all artifacts written — show before/after score
+- Never overwrite existing files unless --force is passed
+- --force can target a single file: --force CONSTRAINTS.md
 
-## Out of scope
-- No Stage 2 work
-- No automatic cleanup/deletion of messy harness files
-- No overwriting canonical harness artifacts
+## Modules to create
 
-## Pass criteria
-- npm run build: zero errors
-- npm run typecheck: zero errors
-- npm run lint: clean
-- npm test: all tests pass (151+ tests)
-- `.aiready/plan.md` is written during audit and references examples templates
-- `--json` includes `remediation` and `token_usage`
-- Generated/improved artifact items include `max_lines: 300`
-- Normal audit runs exit 0 unless `--min-score` is explicitly provided and failed
+| File | Responsibility |
+|---|---|
+| `src/init/parser.ts` | Parse `.aiready/plan.md` into typed `InitPlan` |
+| `src/init/generator.ts` | Generate new artifact from template + source context (1 LLM call) |
+| `src/init/improver.ts` | Improve a section of an existing artifact (1 LLM call) |
+| `src/init/executor.ts` | Write lifecycle — skip/force logic, console output, file writes |
+| `src/init/scorer.ts` | Lightweight re-audit: returns `overall` score using existing audit pipeline |
+| `src/init/index.ts` | Main entry point: orchestrates the full init flow |
 
-## Implementation order
-1. Loader semantic selection
-2. Strict scorer prompt/findings
-3. Remediation contract and plan renderer
-4. Reporter/index plan + JSON wiring
-5. Spinner utility
-6. Tests
-7. Full verification and docs
+## CLI registration
+- `src/cli.ts` — add `init` command with `--target`, `--provider`, `--model`, `--force [filename]`, `--dry-run`
+
+## Completion gate
+- [ ] `npm run build` — zero errors
+- [ ] `npm run typecheck` — zero errors
+- [ ] `npm run lint` — clean
+- [ ] `npm test` — all pass, no regressions
+- [ ] `node dist/cli.js init --target ./examples/bare-repo --dry-run` shows plan

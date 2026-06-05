@@ -1,12 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 52.42 KB (full pipeline bundled)
-- Tests: 162/162 passing (12 test files)
+- Build: passing — dist/cli.js 65.64 KB (full pipeline + Stage 2 bundled)
+- Tests: 191/191 passing (14 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **feat-011 complete**
+- Active feature: none — **feat-012 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -26,7 +26,7 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-011 complete
+- nothing — feat-012 complete
 
 ## Blocked
 - nothing
@@ -62,8 +62,10 @@
 - [x] examples/good-repo, bare-repo, misnamed-repo fixtures created ✓
 - [x] DECISIONS.md updated with two 2026-06-05 entries ✓
 
-## Backlog — Stage 2+
-- Stage 2: init command (LLM-assisted generation)
+## Completed — Stage 2
+- [x] **feat-012** — `npx aiready init`: parser (plan.md → InitPlan), generator (template + source context → artifact), improver (section-level LLM patch), executor (skip/force/write lifecycle), scorer (pipeline reuse for before/after delta), index (dry-run, sequential execute, re-score)
+
+## Backlog — Stage 3+
 - Stage 3: analyze command (semantic gap analysis)
 - Stage 4: drift command (stale docs detection)
 - Stage 5: fix command (auto-remediation)
