@@ -242,11 +242,11 @@ describe('loadRepo — Graphify detection', () => {
     expect(r.mdFiles.map((f) => f.path)).toEqual(['AGENTS.md']);
   });
 
-  it('caps fullContent before returning repo files', () => {
+  it('returns full uncapped content in fullContent', () => {
     writeFileSync(join(tmp, 'AGENTS.md'), 'A'.repeat(7000));
     const r = loadRepo(tmp);
     const agents = r.mdFiles.find((f) => f.path === 'AGENTS.md');
-    expect(agents?.fullContent.length).toBeLessThan(7000);
-    expect(agents?.fullContent).toContain('[content truncated]');
+    expect(agents?.fullContent.length).toBe(7000);
+    expect(agents?.fullContent).not.toContain('[content truncated]');
   });
 });

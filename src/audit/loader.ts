@@ -36,7 +36,6 @@ const AGENT_ENTRY_CANDIDATES = [
   'COPILOT.md',
 ] as const;
 
-const MAX_CONTENT_CHARS = 6000;
 
 const SUBSYSTEM_CONCEPTS: Record<string, string[]> = {
   identity: [
@@ -68,11 +67,6 @@ const SUBSYSTEM_CONCEPTS: Record<string, string[]> = {
 function scoreNodeLabel(label: string, concepts: string[]): number {
   const lower = label.toLowerCase();
   return concepts.filter((c) => lower.includes(c)).length;
-}
-
-function capContent(content: string): string {
-  if (content.length <= MAX_CONTENT_CHARS) return content;
-  return `${content.slice(0, MAX_CONTENT_CHARS)}\n\n[content truncated]`;
 }
 
 function loadAgentEntry(targetDir: string): string | null {
@@ -146,12 +140,11 @@ function makeRepoFile(target: string, filePath: string): RepoFile | null {
   if (!exists(full)) return null;
   const content = readFile(full);
   if (content === null) return null;
-  const capped = capContent(content);
   return {
     path: filePath,
     name: filePath.split('/').pop() ?? filePath,
-    preview: capped.slice(0, 200),
-    fullContent: capped,
+    preview: content.slice(0, 200),
+    fullContent: content,
   };
 }
 
@@ -248,15 +241,12 @@ export function loadRepo(targetDir: string): RepoFiles {
     conceptMatchedFiles = fromGraph.matchedPaths;
   } else {
     const rawMdFiles = walkMdFiles(targetDir);
-    const walkedFiles = rawMdFiles.map(({ relPath, name, fullContent }) => {
-      const capped = capContent(fullContent);
-      return {
+    const walkedFiles = rawMdFiles.map(({ relPath, name, fullContent }) => ({
       path: relPath,
       name,
-      preview: capped.slice(0, 200),
-      fullContent: capped,
-    };
-    });
+      preview: fullContent.slice(0, 200),
+      fullContent,
+    }));
     mdFiles = dedupeFiles([...guaranteed, ...walkedFiles]);
   }
 
