@@ -60,6 +60,13 @@ describe('report — terminal output', () => {
     expect(output).toContain('AGENTS.md');
   });
 
+  it('prints subsystem details on separate lines', () => {
+    report(makeScored(), { json: false });
+    expect(output).toContain('identity');
+    expect(output).toContain('  Files: AGENTS.md');
+    expect(output).toContain('  Note: gap at 80');
+  });
+
   it('prints (no files) when subsystem has no files', () => {
     report(makeScored(), { json: false });
     expect(output).toContain('(no files)');
@@ -172,7 +179,7 @@ describe('report — JSON output', () => {
         overall: 60,
         generate: [],
         improve: [],
-        review_manually: [],
+        source_context: [],
       },
       planPath: '/repo/.aiready/plan.md',
     });

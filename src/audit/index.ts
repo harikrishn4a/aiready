@@ -10,7 +10,7 @@ import { withSpinner } from '../utils/spinner.js';
 
 export interface AuditOptions {
   json: boolean;
-  minScore: number;
+  minScore?: number;
   provider?: string;
   model?: string;
 }
@@ -47,7 +47,7 @@ export async function runAudit(target: string, opts: AuditOptions): Promise<void
     console.log(`\nTokens used: ${display}`);
   }
 
-  if (scored.overall < opts.minScore) {
+  if (opts.minScore !== undefined && scored.overall < opts.minScore) {
     process.exit(1);
   }
 }

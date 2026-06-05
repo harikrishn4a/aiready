@@ -54,12 +54,12 @@ describe('buildRemediationPlan', () => {
     expect(plan.improve[0]?.template_section).toContain('examples/agents.md');
   });
 
-  it('adds manual review for weak non-canonical files', () => {
+  it('adds source context for weak non-canonical files', () => {
     const plan = buildRemediationPlan(
       scored({ state: sub(35, ['FEATURE_PLAN.md'], ['no current status']) }),
       '/repo',
     );
-    expect(plan.review_manually[0]).toMatchObject({
+    expect(plan.source_context[0]).toMatchObject({
       path: 'FEATURE_PLAN.md',
       subsystem: 'state',
     });
@@ -76,6 +76,7 @@ describe('renderRemediationMarkdown', () => {
     expect(md).toContain('# AIReady Plan');
     expect(md).toContain('template: examples/agents.md');
     expect(md).toContain('max_lines: 300');
+    expect(md).toContain('## Missing Artifacts');
   });
 });
 

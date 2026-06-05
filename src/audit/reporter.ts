@@ -20,11 +20,14 @@ function abbreviateFiles(files: string[]): string {
   return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
 }
 
-function subsystemLine(name: string, score: number, gaps: string[], files: string[]): string {
+function subsystemLines(name: string, score: number, gaps: string[], files: string[]): string[] {
   const scoreStr = String(score).padStart(3);
-  const filePart = abbreviateFiles(files).padEnd(30);
   const summary = gaps.length > 0 ? gaps[0] : 'All checks passed';
-  return `${name.padEnd(14)}  ${bar(score)}  ${scoreStr}   ${filePart}  ${summary}`;
+  return [
+    `${name.padEnd(14)} ${scoreStr}  ${bar(score)}`,
+    `  Files: ${abbreviateFiles(files)}`,
+    `  Note: ${summary}`,
+  ];
 }
 
 function getRecommendation(scored: ScoredResult): string {
@@ -97,11 +100,17 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
 
   lines.push(`AI Readiness: ${scored.overall}/100`);
   lines.push('');
-  lines.push(subsystemLine('identity', scored.identity.score, scored.identity.gaps, scored.identity.files));
-  lines.push(subsystemLine('verification', scored.verification.score, scored.verification.gaps, scored.verification.files));
-  lines.push(subsystemLine('state', scored.state.score, scored.state.gaps, scored.state.files));
-  lines.push(subsystemLine('memory', scored.memory.score, scored.memory.gaps, scored.memory.files));
-  lines.push(subsystemLine('constraints', scored.constraints.score, scored.constraints.gaps, scored.constraints.files));
+  const subsystemBlocks = [
+    subsystemLines('identity', scored.identity.score, scored.identity.gaps, scored.identity.files),
+    subsystemLines('verification', scored.verification.score, scored.verification.gaps, scored.verification.files),
+    subsystemLines('state', scored.state.score, scored.state.gaps, scored.state.files),
+    subsystemLines('memory', scored.memory.score, scored.memory.gaps, scored.memory.files),
+    subsystemLines('constraints', scored.constraints.score, scored.constraints.gaps, scored.constraints.files),
+  ];
+  for (const [idx, block] of subsystemBlocks.entries()) {
+    if (idx > 0) lines.push('');
+    lines.push(...block);
+  }
 
   const criticalGaps = collectCriticalGaps(scored);
   if (criticalGaps.length > 0) {

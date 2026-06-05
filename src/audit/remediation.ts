@@ -10,6 +10,9 @@ export interface RemediationItem {
   required_sections: string[];
   source_signals: string[];
   max_lines: number;
+  why?: string;
+  use_as_sources?: string[];
+  write_policy?: string[];
   score?: number;
   findings?: string[];
 }
@@ -35,7 +38,7 @@ export interface RemediationPlan {
   overall: number;
   generate: RemediationItem[];
   improve: ImproveItem[];
-  review_manually: ManualReviewItem[];
+  source_context: ManualReviewItem[];
 }
 
 const MAX_LINES = 300;
@@ -154,6 +157,13 @@ function buildImproveItem(subsystem: Subsystem, data: SubsystemScore): ImproveIt
     filename,
     score: data.score,
     findings: data.findings.map((f) => `${f.type}: ${f.message}`),
+    why: `Existing ${SECTION_BY_SUBSYSTEM[subsystem]} scored ${data.score}/100.`,
+    use_as_sources: [...data.files],
+    write_policy: [
+      'preserve existing useful content',
+      'do not overwrite without --force',
+      `keep artifact under ${MAX_LINES} lines`,
+    ],
     section: SECTION_BY_SUBSYSTEM[subsystem],
     missing,
     fix: `Update ${SECTION_BY_SUBSYSTEM[subsystem]} using ${base.template}; keep the artifact under ${MAX_LINES} lines.`,
@@ -161,7 +171,7 @@ function buildImproveItem(subsystem: Subsystem, data: SubsystemScore): ImproveIt
   };
 }
 
-function buildManualReviewItems(subsystem: Subsystem, data: SubsystemScore): ManualReviewItem[] {
+function buildSourceContextItems(subsystem: Subsystem, data: SubsystemScore): ManualReviewItem[] {
   if (data.score >= 60) return [];
   return data.files
     .filter((file) => !CANONICAL_BY_SUBSYSTEM[subsystem].test(file))
@@ -169,23 +179,33 @@ function buildManualReviewItems(subsystem: Subsystem, data: SubsystemScore): Man
       path,
       subsystem,
       score: data.score,
-      reason: 'Useful content was found outside a canonical harness artifact.',
-      suggestion: `Review manually; merge durable harness details into ${GENERATE_ITEMS[subsystem].filename} and do not delete this file automatically.`,
+      reason: 'Useful context was found outside a canonical harness artifact.',
+      suggestion: `Use as source context only. Extract durable facts into ${GENERATE_ITEMS[subsystem].filename}; do not delete, rename, or overwrite this file automatically.`,
     }));
 }
 
 export function buildRemediationPlan(scored: ScoredResult, target: string): RemediationPlan {
   const generate: RemediationItem[] = [];
   const improve: ImproveItem[] = [];
-  const review_manually: ManualReviewItem[] = [];
+  const source_context: ManualReviewItem[] = [];
 
   for (const subsystem of ['identity', 'verification', 'state', 'memory', 'constraints'] as const) {
     const data = scored[subsystem];
     if (data.files.length === 0) {
-      generate.push(cloneGenerateItem(subsystem));
+      const item = cloneGenerateItem(subsystem);
+      generate.push({
+        ...item,
+        why: `No file was mapped to the ${subsystem} subsystem.`,
+        use_as_sources: [],
+        write_policy: [
+          'create only if missing',
+          'do not overwrite an existing user file without --force',
+          `keep artifact under ${MAX_LINES} lines`,
+        ],
+      });
     } else if (data.score < 60) {
       improve.push(buildImproveItem(subsystem, data));
-      review_manually.push(...buildManualReviewItems(subsystem, data));
+      source_context.push(...buildSourceContextItems(subsystem, data));
     }
   }
 
@@ -195,7 +215,7 @@ export function buildRemediationPlan(scored: ScoredResult, target: string): Reme
     overall: scored.overall,
     generate,
     improve,
-    review_manually,
+    source_context,
   };
 }
 
@@ -213,41 +233,63 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
   lines.push('## Summary');
   lines.push(`- Missing: ${plan.generate.map((i) => i.filename).join(', ') || 'none'}`);
   lines.push(`- Weak: ${plan.improve.map((i) => i.filename).join(', ') || 'none'}`);
-  lines.push(`- Manual review: ${plan.review_manually.map((i) => i.path).join(', ') || 'none'}`);
+  lines.push(`- Source context: ${plan.source_context.map((i) => i.path).join(', ') || 'none'}`);
   lines.push('');
 
   if (plan.generate.length > 0) {
-    lines.push('## Generate');
+    lines.push('## Missing Artifacts');
     for (const item of plan.generate) {
       lines.push(`### ${item.filename}`);
+      if (item.why) lines.push(`- why: ${item.why}`);
       lines.push(`- template: ${item.template}`);
       lines.push(`- subsystem: ${item.subsystem}`);
       lines.push(`- max_lines: ${item.max_lines}`);
       lines.push(`- required_sections: ${list(item.required_sections)}`);
       lines.push(`- source_signals: ${list(item.source_signals)}`);
-      lines.push('');
-    }
-  }
-
-  if (plan.improve.length > 0) {
-    lines.push('## Improve');
-    for (const item of plan.improve) {
-      lines.push(`### ${item.filename} → ${item.section}`);
-      lines.push(`- score: ${item.score ?? 0}`);
-      lines.push(`- max_lines: ${item.max_lines}`);
-      lines.push(`- missing: ${item.missing}`);
-      lines.push(`- fix: ${item.fix}`);
-      lines.push(`- template_section: ${item.template_section}`);
-      if (item.findings && item.findings.length > 0) {
-        lines.push(`- findings: ${list(item.findings)}`);
+      if (item.write_policy && item.write_policy.length > 0) {
+        lines.push('- write_policy:');
+        for (const policy of item.write_policy) {
+          lines.push(`  - ${policy}`);
+        }
       }
       lines.push('');
     }
   }
 
-  if (plan.review_manually.length > 0) {
-    lines.push('## Review Manually');
-    for (const item of plan.review_manually) {
+  if (plan.improve.length > 0) {
+    lines.push('## Weak Artifacts');
+    for (const item of plan.improve) {
+      lines.push(`### ${item.filename}`);
+      lines.push(`- score: ${item.score ?? 0}`);
+      if (item.why) lines.push(`- why: ${item.why}`);
+      lines.push(`- max_lines: ${item.max_lines}`);
+      lines.push(`- missing: ${item.missing}`);
+      lines.push(`- fix: ${item.fix}`);
+      lines.push(`- template_section: ${item.template_section}`);
+      if (item.use_as_sources && item.use_as_sources.length > 0) {
+        lines.push(`- use_as_sources: ${list(item.use_as_sources)}`);
+      }
+      if (item.write_policy && item.write_policy.length > 0) {
+        lines.push('- write_policy:');
+        for (const policy of item.write_policy) {
+          lines.push(`  - ${policy}`);
+        }
+      }
+      if (item.findings && item.findings.length > 0) {
+        lines.push('- findings:');
+        for (const finding of item.findings) {
+          lines.push(`  - ${finding}`);
+        }
+      }
+      lines.push('');
+    }
+  }
+
+  if (plan.source_context.length > 0) {
+    lines.push('## Source Context To Review');
+    lines.push('These files may contain useful context, but should not be treated as canonical harness artifacts.');
+    lines.push('');
+    for (const item of plan.source_context) {
       lines.push(`### ${item.path}`);
       lines.push(`- subsystem: ${item.subsystem}`);
       lines.push(`- score: ${item.score}`);

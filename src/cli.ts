@@ -14,13 +14,13 @@ program
   .description('Score a repository against the 5 AI-readiness subsystems')
   .option('-t, --target <dir>', 'target directory to audit', '.')
   .option('--json', 'output results as JSON', false)
-  .option('--min-score <n>', 'exit 1 if overall score is below this threshold', '70')
+  .option('--min-score <n>', 'exit 1 if overall score is below this threshold (CI opt-in)')
   .option('--provider <name>', 'LLM provider: anthropic | openai | ollama (skips prompt)')
   .option('--model <id>', 'model ID (e.g. claude-sonnet-4-6, gpt-4o) — skips prompt')
-  .action((opts: { target: string; json: boolean; minScore: string; provider?: string; model?: string }) => {
+  .action((opts: { target: string; json: boolean; minScore?: string; provider?: string; model?: string }) => {
     runAudit(opts.target, {
       json: opts.json,
-      minScore: parseInt(opts.minScore, 10),
+      minScore: opts.minScore === undefined ? undefined : parseInt(opts.minScore, 10),
       provider: opts.provider,
       model: opts.model,
     }).catch((err: unknown) => {

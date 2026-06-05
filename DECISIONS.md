@@ -142,3 +142,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Terminal-only remediation output — easy to lose and hard for `init` to consume. Auto-cleaning messy files — too risky; audit should suggest manual review only. Centrality-based Graphify selection — harness files often have low centrality because few files reference them.
 - **Constraints introduced**: Graphify selection uses semantic node-label concept matching plus guaranteed root harness filenames. Spinner output is TTY-only and disabled for JSON/CI. Stage 1 may write `.aiready/plan.md`, but it must not generate or overwrite canonical harness files.
 - **Revisit when**: Stage 2 `init` is implemented and needs additional fields in the remediation contract.
+
+---
+
+### 2026-06-05: Audit output and plan contract are simplified
+
+- **Decision**: Rename remediation `review_manually` to `source_context`, render `.aiready/plan.md` as Missing Artifacts / Weak Artifacts / Source Context To Review, render terminal subsystem scores as multi-line blocks, and make `--min-score` an explicit CI opt-in instead of a default failure threshold.
+- **Reason**: `source_context` is clearer than "manual review": those files are inputs for generation, not cleanup instructions. Multi-line terminal output avoids confusing line wraps on long notes. Defaulting audit to exit 0 keeps exploratory runs from looking like CLI failures while preserving CI gating through `--min-score`.
+- **Rejected alternatives**: Keep the default score threshold at 70 — useful for CI but surprising for local discovery. Keep one-line bar output — compact but hard to scan once explanations wrap.
+- **Constraints introduced**: Normal audit runs should not call `process.exit(1)` solely because the score is low. Future `init` code should treat `source_context` as read-only input and must not delete, rename, or overwrite those files automatically.
+- **Revisit when**: Stage 2 `init` consumes `.aiready/plan.md` and needs additional machine-readable fields.

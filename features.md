@@ -176,15 +176,15 @@ Audit output is shorter and more actionable. It writes `.aiready/plan.md` as a d
 - [x] `loader.ts` — always include root harness filenames, semantic Graphify node-label matching, dedupe, 6000-char content cap
 - [x] `mapper.ts` — align with 5-line triage previews and 50-line classification previews
 - [x] `scorer.ts` — strict course-aligned scoring criteria and findings shape
-- [x] `remediation.ts` — typed generate/improve/review_manually contract with `examples/` template references and `max_lines: 300`
-- [x] `reporter.ts` / `index.ts` — short CLI summary, JSON remediation, `.aiready/plan.md`
+- [x] `remediation.ts` — typed generate/improve/source_context contract with `examples/` template references and `max_lines: 300`
+- [x] `reporter.ts` / `index.ts` — readable multi-line CLI summary, JSON remediation, `.aiready/plan.md`, opt-in `--min-score` failure
 - [x] `spinner.ts` — sea-green TTY-only loading spinner disabled for JSON/CI
 - [x] Tests for loader semantics, remediation, reporter JSON, spinner gate
 
 **Acceptance criteria:**
 - `npm run build`, `npm run typecheck`, `npm run lint`, and `npm test` pass
 - `.aiready/plan.md` references canonical examples templates and caps generated artifacts at 300 lines
-- JSON includes `token_usage` and `remediation.generate/improve/review_manually`
+- JSON includes `token_usage` and `remediation.generate/improve/source_context`
 - Stage 2 remains unimplemented
 
 **Out of scope:**
