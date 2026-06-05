@@ -459,6 +459,29 @@
       ],
       "agent_notes": "output.ts: cleanLLMOutput(). parser.ts: parse GENERATE/IMPROVE/SKIP/SOURCE CONTEXT. planner.ts: pure parser — no CANONICAL_ARTIFACTS loop. context.ts: sourcesAreThin(), resolveArtifactSources() with graphify always-on + thin expansion from SOURCE CONTEXT. graphify.ts: shared findGraphifyOutput/rankGraphifyFiles for audit loader and init. executor.ts: cleanLLMOutput before write; empty improve → generateArtifact. Tests: betterworld-mini graphify fixture, init-context.test.ts, init-output.test.ts.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-018",
+      "priority": 18,
+      "area": "audit",
+      "title": "File-type-aware structural scoring + verification baseline",
+      "user_visible_behavior": "Structural scoring now dispatches by file type: Makefile gets scored on target presence (not ## headings), shell scripts on pattern presence, JSON on required key coverage, architecture.md on Responsibilities/Must NOT/table/dataflow patterns. Verification subsystem uses deterministic baseline check (commandExists + documented + crossRefsValid) instead of LLM content scoring. Terminal output shows 'Baseline: established/partial/missing' for verification.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 98.49 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 288/288 (21 test files)"
+      ],
+      "agent_notes": "templates.ts: FileType type, detectFileType(), REQUIRED_MAKEFILE_TARGETS, REQUIRED_INIT_SH_PATTERNS, REQUIRED_VERIFY_SH_PATTERNS, REQUIRED_JSON_KEYS. scorer.ts: scoreMakefileStructure(), scoreShellStructure(), scoreJsonStructure(), scoreArchitectureStructure(), updated scoreStructural(filename, content, sections) with file-type dispatch; per-file structural aggregation in scoreRepo (buildSubsystemContent now returns fileContents Map); BaselineCheck interface, checkVerificationBaseline(), scoreFromBaseline() replaces LLM content score for verification. reporter.ts: Baseline line shown for verification.",
+      "last_updated": "2026-06-05"
     }
   ]
 }

@@ -190,3 +190,22 @@ Audit output is shorter and more actionable. It writes `.aiready/plan.md` as a d
 **Out of scope:**
 - Running `init`
 - Automatically deleting or cleaning messy harness files
+
+---
+
+## feat-018: File-type-aware structural scoring + verification baseline
+
+**What the user sees:**
+Makefile and shell scripts are scored on their actual content (target presence, pattern presence) rather than `##` headings. Verification terminal output shows `Baseline: established/partial/missing`. Repos with a Makefile + documented verification commands score higher for verification.
+
+**Tasks:**
+- [x] `templates.ts` — `FileType`, `detectFileType()`, `REQUIRED_MAKEFILE_TARGETS`, `REQUIRED_INIT_SH_PATTERNS`, `REQUIRED_VERIFY_SH_PATTERNS`, `REQUIRED_JSON_KEYS`
+- [x] `scorer.ts` — `scoreMakefileStructure()`, `scoreShellStructure()`, `scoreJsonStructure()`, `scoreArchitectureStructure()`; updated `scoreStructural(filename, content, sections)` dispatch; per-file structural aggregation in `scoreRepo`
+- [x] `scorer.ts` — `BaselineCheck` interface, `checkVerificationBaseline()`, `scoreFromBaseline()`; verification subsystem uses baseline instead of LLM content score
+- [x] `reporter.ts` — `Baseline: <status>` line for verification in terminal output
+- [x] Tests in `templates.test.ts` and `scorer.test.ts` for all new functions
+
+**Acceptance criteria:**
+- `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` all pass
+- Makefile with all 6 required targets scores 100 structural
+- Repo with Makefile + `make check` documented in AGENTS.md → verification baseline = established → contentScore = 90

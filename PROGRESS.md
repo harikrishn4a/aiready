@@ -1,12 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 82.71 KB (full pipeline + Stage 2 bundled)
-- Tests: 237/237 passing (19 test files)
+- Build: passing — dist/cli.js 98.49 KB (full pipeline + Stage 2 bundled)
+- Tests: 288/288 passing (21 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **feat-017 complete**
+- Active feature: none — **feat-018 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -26,7 +26,7 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-017 complete
+- nothing — feat-018 complete
 
 ## Blocked
 - nothing
@@ -68,6 +68,8 @@
 - [x] **feat-014** — Stage 2 init rebuild: planner.ts generates plans for all 13 canonical artifacts (AGENTS.md, CONSTRAINTS.md, ARCHITECTURE.md, DECISIONS.md, PROGRESS.md, SESSION-HANDOFF.md, TASK.md, features.md, feature_list.json, QUALITY.md, Makefile, scripts/init.sh, scripts/verify.sh); skip threshold 80; alwaysGenerate for blank templates; consolidator.ts merges CLAUDE.md/.cursorrules etc. into AGENTS.md and writes shims; per-subsystem score delta; --yes flag; `## SUBSYSTEM SCORES` + `## SUBSYSTEM SOURCES` in plan.md
 - [x] **feat-015** — Template-based scoring: templates.ts (TEMPLATE_SUBSYSTEM_MAP, loadTemplates(), extractSectionHeadings()); scorer redesign with structural (40%) + content (60%) two-dimensional scoring; scoreStructural() exported; template section summaries in LLM system prompt; non-harness artifacts capped at 20; remediation redesign: async buildRemediationPlan(), 13-artifact canonical list, file-existence-based SKIP/IMPROVE/GENERATE, `## SKIP` section in plan.md; reporter shows template section coverage (N/M + missing names)
 - [x] **feat-016** — Audit plan source cleanup: SOURCE CONTEXT dedupes by path with combined subsystems; IMPROVE source_files prefer non-empty source context over empty canonical stubs; artifact-specific fixes prevent PROGRESS.md and SESSION-HANDOFF.md guidance from being conflated
+- [x] **feat-017** — Init plan contract: GENERATE/IMPROVE/SKIP/SOURCE CONTEXT parsing; graphify always-on context; LLM writes with clean output; thin-source detection; empty improve → generate
+- [x] **feat-018** — File-type-aware structural scoring: detectFileType() dispatches Makefile → target check, *.sh → pattern match, *.json → key check, architecture.md → pattern check; scoreStructural() takes filename; per-file structural aggregation; verification baseline check (checkVerificationBaseline + scoreFromBaseline) replaces LLM content scoring for verification subsystem; reporter shows baseline status
 
 ## Backlog — Stage 3+
 - Stage 3: analyze command (semantic gap analysis)
