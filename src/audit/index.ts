@@ -15,7 +15,7 @@ export interface AuditOptions {
 
 export async function runAudit(target: string, opts: AuditOptions): Promise<void> {
   const config = await selectAuditConfig({ provider: opts.provider, model: opts.model });
-  const provider = createProvider(config.provider, config.apiKey);
+  const provider = createProvider(config.provider, config.apiKey, config.modelId);
 
   const targetDir = resolve(target);
   const files = loadRepo(targetDir);

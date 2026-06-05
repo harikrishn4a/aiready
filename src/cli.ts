@@ -16,7 +16,7 @@ program
   .option('--json', 'output results as JSON', false)
   .option('--min-score <n>', 'exit 1 if overall score is below this threshold', '70')
   .option('--provider <name>', 'LLM provider: anthropic | openai | ollama (skips prompt)')
-  .option('--model <tier>', 'model tier: fast | quality (skips prompt)')
+  .option('--model <id>', 'model ID (e.g. claude-sonnet-4-6, gpt-4o) — skips prompt')
   .action((opts: { target: string; json: boolean; minScore: string; provider?: string; model?: string }) => {
     runAudit(opts.target, {
       json: opts.json,

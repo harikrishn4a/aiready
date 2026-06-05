@@ -20,31 +20,32 @@ afterEach(() => {
 describe('selectAuditConfig — flags provided (no prompts)', () => {
   it('returns anthropic config when flags are set and key is in env', async () => {
     process.env['ANTHROPIC_API_KEY'] = 'test-ant-key';
-    const config = await selectAuditConfig({ provider: 'anthropic', model: 'fast' });
+    const config = await selectAuditConfig({ provider: 'anthropic', model: 'claude-sonnet-4-6' });
     expect(config.provider).toBe('anthropic');
-    expect(config.modelTier).toBe('fast');
+    expect(config.modelId).toBe('claude-sonnet-4-6');
     expect(config.apiKey).toBe('test-ant-key');
     delete process.env['ANTHROPIC_API_KEY'];
   });
 
   it('returns openai config when flags are set and key is in env', async () => {
     process.env['OPENAI_API_KEY'] = 'test-oai-key';
-    const config = await selectAuditConfig({ provider: 'openai', model: 'quality' });
+    const config = await selectAuditConfig({ provider: 'openai', model: 'gpt-4o' });
     expect(config.provider).toBe('openai');
-    expect(config.modelTier).toBe('quality');
+    expect(config.modelId).toBe('gpt-4o');
     expect(config.apiKey).toBe('test-oai-key');
     delete process.env['OPENAI_API_KEY'];
   });
 
   it('returns ollama config with no API key required', async () => {
-    const config = await selectAuditConfig({ provider: 'ollama', model: 'fast' });
+    const config = await selectAuditConfig({ provider: 'ollama', model: 'llama3' });
     expect(config.provider).toBe('ollama');
+    expect(config.modelId).toBe('llama3');
     expect(config.apiKey).toBeUndefined();
   });
 
   it('does not call select() when both flags are provided', async () => {
     process.env['ANTHROPIC_API_KEY'] = 'key';
-    await selectAuditConfig({ provider: 'anthropic', model: 'fast' });
+    await selectAuditConfig({ provider: 'anthropic', model: 'claude-haiku-4-5-20251001' });
     const select = await getSelect();
     expect(select).not.toHaveBeenCalled();
     delete process.env['ANTHROPIC_API_KEY'];
@@ -61,7 +62,7 @@ describe('selectAuditConfig — API key gate', () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     delete process.env['ANTHROPIC_API_KEY'];
-    await expect(selectAuditConfig({ provider: 'anthropic', model: 'fast' })).rejects.toThrow();
+    await expect(selectAuditConfig({ provider: 'anthropic', model: 'claude-sonnet-4-6' })).rejects.toThrow();
     expect(exitSpy).toHaveBeenCalledWith(1);
 
     exitSpy.mockRestore();
@@ -75,7 +76,7 @@ describe('selectAuditConfig — API key gate', () => {
     const stderrSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
 
     delete process.env['OPENAI_API_KEY'];
-    await expect(selectAuditConfig({ provider: 'openai', model: 'fast' })).rejects.toThrow();
+    await expect(selectAuditConfig({ provider: 'openai', model: 'gpt-4o' })).rejects.toThrow();
     expect(exitSpy).toHaveBeenCalledWith(1);
 
     exitSpy.mockRestore();
@@ -87,7 +88,7 @@ describe('selectAuditConfig — API key gate', () => {
       throw new Error('process.exit called');
     }) as () => never);
 
-    const config = await selectAuditConfig({ provider: 'ollama', model: 'fast' });
+    const config = await selectAuditConfig({ provider: 'ollama', model: 'llama3' });
     expect(exitSpy).not.toHaveBeenCalled();
     expect(config.apiKey).toBeUndefined();
 
@@ -105,7 +106,7 @@ describe('selectAuditConfig — API key gate', () => {
     });
 
     delete process.env['ANTHROPIC_API_KEY'];
-    await expect(selectAuditConfig({ provider: 'anthropic', model: 'fast' })).rejects.toThrow();
+    await expect(selectAuditConfig({ provider: 'anthropic', model: 'claude-sonnet-4-6' })).rejects.toThrow();
 
     const combined = stderrMessages.join('');
     expect(combined).toContain('ANTHROPIC_API_KEY');
@@ -122,24 +123,36 @@ describe('selectAuditConfig — API key gate', () => {
 // ── Interactive path ──────────────────────────────────────────────────────────
 
 describe('selectAuditConfig — interactive (no flags)', () => {
-  it('calls select() for provider when no flag given', async () => {
+  it('calls select() for provider and model when no flags given', async () => {
     process.env['ANTHROPIC_API_KEY'] = 'key';
     const select = await getSelect();
     select
-      .mockResolvedValueOnce('anthropic')  // provider prompt
-      .mockResolvedValueOnce('fast');       // model prompt
+      .mockResolvedValueOnce('anthropic')          // provider prompt
+      .mockResolvedValueOnce('claude-sonnet-4-6'); // model prompt
 
-    await selectAuditConfig({});
+    const config = await selectAuditConfig({});
     expect(select).toHaveBeenCalledTimes(2);
+    expect(config.modelId).toBe('claude-sonnet-4-6');
     delete process.env['ANTHROPIC_API_KEY'];
   });
 
-  it('skips model prompt for ollama (always fast)', async () => {
+  it('skips model prompt for ollama (uses OLLAMA_MODEL or default)', async () => {
     const select = await getSelect();
     select.mockResolvedValueOnce('ollama'); // provider only
 
+    delete process.env['OLLAMA_MODEL'];
     const config = await selectAuditConfig({});
     expect(select).toHaveBeenCalledTimes(1);
-    expect(config.modelTier).toBe('fast');
+    expect(config.modelId).toBe('llama3');
+  });
+
+  it('uses OLLAMA_MODEL env var when set', async () => {
+    const select = await getSelect();
+    select.mockResolvedValueOnce('ollama');
+
+    process.env['OLLAMA_MODEL'] = 'mistral';
+    const config = await selectAuditConfig({});
+    expect(config.modelId).toBe('mistral');
+    delete process.env['OLLAMA_MODEL'];
   });
 });

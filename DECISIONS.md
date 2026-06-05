@@ -102,3 +102,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Constraints introduced**: `llm.ts` is the ONLY file that imports `@anthropic-ai/sdk` or `openai`. `mapper.ts` and `scorer.ts` must accept `LLMProvider`, never a raw API key. New providers must implement `LLMProvider` fully before being passed to `createProvider`.
 - **Revisit when**: A user requests a provider not covered by the OpenAI-compatible adapter pattern (e.g., Google Gemini native API, Mistral native API).
 - Revisit when: Claude Code publishes a stable subprocess API, or when MCP adoption is broad enough to justify building a parallel MCP interface
+
+---
+
+### 2026-06-05: Dynamic OpenAI model list + versioned Anthropic model list
+
+- **Decision**: OpenAI models are fetched live from `GET /v1/models` (filtered to `gpt-*`, sorted newest-first, with a static fallback on failure); Anthropic models are maintained as a versioned hardcoded list in `src/utils/models.ts`.
+- **Reason**: OpenAI publishes a public `/models` endpoint and releases new models frequently — dynamic fetch keeps the list current without code changes. Anthropic has no public model discovery endpoint; a curated list in one file is the least-friction maintenance approach.
+- **Rejected alternatives**: Hardcode both providers — stale OpenAI list on every new model release. Fetch both dynamically — Anthropic has no equivalent endpoint.
+- **Constraints introduced**: `listOpenAIModels()` lives in `llm.ts` (the SDK boundary file) and is the only place that calls `client.models.list()`. `models.ts` exports `ANTHROPIC_MODELS` and `OPENAI_FALLBACK_MODELS`; model ID updates require editing only that file. `AuditConfig.modelId` is now a raw string (the chosen model ID), not a tier enum — the tier-routing logic lives entirely inside each provider's `chat()` method.
+- **Revisit when**: Anthropic adds a public model discovery endpoint, or the fallback model list becomes noticeably stale.

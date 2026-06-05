@@ -5,39 +5,34 @@
 
 ## What was completed
 - **feat-007 complete** — Provider abstraction with interactive selection and dotenv
+- **feat-008 complete** — Dynamic OpenAI model list + versioned Anthropic model list
 
-### New files
+### feat-008 changes
+#### New files
+- `src/utils/models.ts` — `ModelDef` interface, `ANTHROPIC_MODELS` (5 models, versioned), `OPENAI_FALLBACK_MODELS` (4 models). Single file to update when adding new models.
+
+#### Modified files
+- `src/utils/llm.ts` — added `modelId?` param to `AnthropicProvider` and `OpenAIProvider` constructors (when set, overrides `fast` hint entirely); added `listOpenAIModels(apiKey)` that calls `client.models.list()` filtered to `gpt-*` chat models sorted newest-first with static fallback on error; `createProvider()` now accepts optional `modelId` third arg
+- `src/utils/prompt.ts` — `AuditConfig.modelId: string` replaces `modelTier: ModelTier`; `promptModelId()` fetches live models for OpenAI, uses static list for Anthropic; API key checked BEFORE model selection so OpenAI can use the key to fetch its model list
+- `src/audit/index.ts` — passes `config.modelId` to `createProvider`
+- `src/cli.ts` — updated `--model` description
+- `tests/llm.test.ts` — rewritten: OpenAI mock now includes `models.list` mock; added `modelId` override tests, `listOpenAIModels` tests (filter, sort, fallback on error, fallback on empty)
+- `tests/prompt.test.ts` — updated: all `modelTier` assertions → `modelId`; select mocks return real model IDs; added OLLAMA_MODEL env var test
+
+### feat-007 new files (reference)
 - `src/utils/llm.ts` — `LLMProvider` interface + `AnthropicProvider` + `OpenAIProvider` + `OllamaProvider` + `createProvider()` factory. This is the ONLY file that imports `@anthropic-ai/sdk` or `openai`.
 - `src/utils/prompt.ts` — `selectAuditConfig()`: shows interactive provider/model selection via `@inquirer/prompts` if flags are omitted; checks env var for chosen provider; exits 1 with ERROR/WHY/FIX + provider URL + Ollama suggestion if key missing.
 - `.env.example` — template for ANTHROPIC_API_KEY, OPENAI_API_KEY, OLLAMA_HOST, OLLAMA_MODEL, OPENAI_BASE_URL
-- `tests/llm.test.ts` — 15 tests: model selection, prompt caching, response parsing, createProvider factory
-- `tests/prompt.test.ts` — 10 tests: flag passthrough, API key gate per provider, Ollama no-key, interactive prompts
-
-### Modified files
-- `src/audit/mapper.ts` — removed `@anthropic-ai/sdk` import; accepts `LLMProvider` instead of `apiKey: string`; calls `provider.chat(..., { fast: true })`
-- `src/audit/scorer.ts` — same pattern; calls `provider.chat(..., { fast: false })`
-- `src/audit/index.ts` — calls `selectAuditConfig()` then `createProvider()`; removed old ANTHROPIC_API_KEY guard
-- `src/cli.ts` — added `import 'dotenv/config'` as first line; added `--provider` and `--model` flags
-- `.gitignore` — added `.env`
-- `tests/mapper.test.ts` — replaced SDK mock pattern with mock `LLMProvider`
-- `tests/scorer.test.ts` — same
-- `tests/integration.test.ts` — dropped SDK mock; uses mock `LLMProvider`; added OPENAI key guard test and `audit --help` flag test
-
-### New dependencies
-- `dotenv` — `.env` file loading at CLI startup
-- `@inquirer/prompts` — interactive `select()` for provider/model choice
-- `openai` — used by both OpenAIProvider and OllamaProvider (OpenAI-compatible)
+- `tests/llm.test.ts` — 23 tests: model selection, modelId override, prompt caching, response parsing, listOpenAIModels, createProvider factory
+- `tests/prompt.test.ts` — 11 tests: flag passthrough, API key gate per provider, Ollama no-key, OLLAMA_MODEL env var, interactive prompts
 
 ## Verification run
 | Command | Result |
 |---|---|
-| `npm run build` | pass — dist/cli.js 25.73 KB, zero errors |
-| `npm test` | pass — 112/112 (9 test files) |
+| `npm run build` | pass — dist/cli.js 26.66 KB, zero errors |
+| `npm test` | pass — 121/121 (9 test files) |
 | `npm run typecheck` | pass — zero errors |
 | `npm run lint` | pass — clean |
-| `node dist/cli.js --version` | 0.1.0 |
-| `node dist/cli.js audit --provider anthropic --model fast` (no key) | exit 1, ERROR/WHY/FIX with console.anthropic.com URL |
-| `node dist/cli.js audit --help` | shows --provider and --model flags |
 
 ## What is broken or unverified
 - Real LLM calls still not tested in automated suite (all mocked)
@@ -46,14 +41,14 @@
 
 ## Manual smoke test (requires .env or exported key)
 ```bash
-# Anthropic — skips prompts
-node dist/cli.js audit --target examples/good-repo --provider anthropic --model fast
+# Anthropic — interactive model selection from versioned list
+node dist/cli.js audit --target examples/good-repo --provider anthropic
 
-# OpenAI — skips prompts
-node dist/cli.js audit --target examples/good-repo --provider openai --model fast
+# Anthropic — skip prompt with explicit model
+node dist/cli.js audit --target examples/good-repo --provider anthropic --model claude-sonnet-4-6
 
-# Interactive — shows prompts
-node dist/cli.js audit --target examples/misnamed-repo
+# OpenAI — interactive: fetches live model list from /v1/models
+node dist/cli.js audit --target examples/good-repo --provider openai
 
 # Ollama (local) — no key needed
 node dist/cli.js audit --target examples/bare-repo --provider ollama
@@ -67,5 +62,7 @@ node dist/cli.js audit --target examples/bare-repo --provider ollama
 ## Must not change
 - `src/utils/llm.ts` is the ONLY file that may import `@anthropic-ai/sdk` or `openai`
 - `mapper.ts` and `scorer.ts` must accept `LLMProvider`, never a raw API key
+- `listOpenAIModels()` is the only place that calls `client.models.list()`
+- `AuditConfig.modelId` is a raw string — tier routing lives inside provider `chat()` methods, not in `AuditConfig`
 - The 5 subsystem names are fixed across all stages
 - `dotenv/config` must remain the absolute first import in `src/cli.ts`

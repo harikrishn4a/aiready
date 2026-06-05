@@ -1,9 +1,11 @@
 import { select } from '@inquirer/prompts';
-import type { ProviderName, ModelTier } from './llm.js';
+import type { ProviderName } from './llm.js';
+import { listOpenAIModels } from './llm.js';
+import { ANTHROPIC_MODELS } from './models.js';
 
 export interface AuditConfig {
   provider: ProviderName;
-  modelTier: ModelTier;
+  modelId: string;
   apiKey: string | undefined;
 }
 
@@ -33,8 +35,7 @@ function exitMissingKey(provider: ProviderName, envVar: string): never {
   process.exit(1);
 }
 
-function resolveProvider(flag?: string): ProviderName {
-  if (!flag) return 'anthropic';
+function resolveProvider(flag: string): ProviderName {
   const valid: ProviderName[] = ['anthropic', 'openai', 'ollama'];
   const lower = flag.toLowerCase() as ProviderName;
   if (!valid.includes(lower)) {
@@ -42,14 +43,6 @@ function resolveProvider(flag?: string): ProviderName {
     process.exit(1);
   }
   return lower;
-}
-
-function resolveModelTier(flag?: string): ModelTier | undefined {
-  if (!flag) return undefined;
-  const lower = flag.toLowerCase();
-  if (lower === 'fast' || lower === 'quality') return lower;
-  process.stderr.write(`ERROR: Unknown model tier "${flag}". Valid options: fast, quality\n`);
-  process.exit(1);
 }
 
 async function promptProvider(): Promise<ProviderName> {
@@ -63,39 +56,43 @@ async function promptProvider(): Promise<ProviderName> {
   });
 }
 
-async function promptModelTier(provider: ProviderName): Promise<ModelTier> {
-  if (provider === 'ollama') return 'fast';
+async function promptModelId(provider: ProviderName, apiKey: string | undefined): Promise<string> {
+  if (provider === 'ollama') {
+    return process.env['OLLAMA_MODEL'] ?? 'llama3';
+  }
 
-  const choices: Array<{ name: string; value: ModelTier }> =
-    provider === 'anthropic'
-      ? [
-          { name: 'Claude Haiku  — fast, cheap, good for most repos', value: 'fast' },
-          { name: 'Claude Sonnet — slower, better, for large or complex repos', value: 'quality' },
-        ]
-      : [
-          { name: 'GPT-4o Mini  — fast, cheap, good for most repos', value: 'fast' },
-          { name: 'GPT-4o       — slower, better, for large or complex repos', value: 'quality' },
-        ];
+  if (provider === 'anthropic') {
+    return select({
+      message: 'Select model:',
+      choices: ANTHROPIC_MODELS.map((m) => ({ name: m.label, value: m.id })),
+    });
+  }
 
-  return select({ message: 'Select model:', choices });
+  // openai — fetch available models dynamically, fall back to static list
+  const models = await listOpenAIModels(apiKey!);
+  return select({
+    message: 'Select model:',
+    choices: models.map((m) => ({ name: m.label, value: m.id })),
+  });
 }
 
 export async function selectAuditConfig(flags: {
   provider?: string;
   model?: string;
 }): Promise<AuditConfig> {
-  const providerFromFlag = flags.provider ? resolveProvider(flags.provider) : undefined;
-  const tierFromFlag = flags.model ? resolveModelTier(flags.model) : undefined;
+  // 1. Provider — from flag or interactive prompt
+  const provider = flags.provider ? resolveProvider(flags.provider) : await promptProvider();
 
-  const provider = providerFromFlag ?? (await promptProvider());
-  const modelTier = tierFromFlag ?? (await promptModelTier(provider));
-
+  // 2. API key gate — checked before model selection so OpenAI can use the key to fetch models
   const envVarName = ENV_KEY_NAMES[provider];
+  let apiKey: string | undefined;
   if (envVarName) {
-    const apiKey = process.env[envVarName];
+    apiKey = process.env[envVarName];
     if (!apiKey) exitMissingKey(provider, envVarName);
-    return { provider, modelTier, apiKey };
   }
 
-  return { provider, modelTier, apiKey: undefined };
+  // 3. Model ID — from flag or interactive prompt (OpenAI fetches list dynamically)
+  const modelId = flags.model ?? (await promptModelId(provider, apiKey));
+
+  return { provider, modelId, apiKey };
 }

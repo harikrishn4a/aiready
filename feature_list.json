@@ -217,6 +217,30 @@
       ],
       "agent_notes": "llm.ts is the ONLY file importing @anthropic-ai/sdk or openai. mapper.ts and scorer.ts now accept LLMProvider. OllamaProvider uses openai package with custom baseURL. OpenAIProvider reads OPENAI_BASE_URL for Groq/Azure/proxy support. Tests mock both SDKs only in llm.test.ts; all other tests use mock LLMProvider objects.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-008",
+      "priority": 8,
+      "area": "utils",
+      "title": "Dynamic OpenAI model list + versioned Anthropic model list",
+      "user_visible_behavior": "Interactive model selection for OpenAI shows live models fetched from /v1/models (newest-first); Anthropic shows a curated versioned list; both fall back gracefully; modelId flows through to provider as an explicit override",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 26.66 KB, zero errors",
+        "npm test: 121/121 (9 test files: 23 llm, 11 prompt, 14 cross-ref, 8 mapper, 11 scorer, 16 reporter, 22 loader, 2 cli, 14 integration)",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "DECISIONS.md: new entry dated 2026-06-05 (dynamic/static model lists)"
+      ],
+      "agent_notes": "models.ts is the single source for ANTHROPIC_MODELS and OPENAI_FALLBACK_MODELS. listOpenAIModels() in llm.ts fetches live, filters gpt-* chat models, sorts newest-first, returns fallback on any error. AuditConfig.modelId replaces modelTier — tier routing is internal to each provider's chat() method.",
+      "last_updated": "2026-06-05"
     }
   ]
 }
