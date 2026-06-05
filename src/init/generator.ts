@@ -95,7 +95,7 @@ export async function generateArtifact(
   const template = loadTemplate(artifact.templateFile);
   assertTemplateLoaded(artifact.templateFile, template);
 
-  if (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename)) {
+  if (artifact.generateOnly || (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename))) {
     return template;
   }
 

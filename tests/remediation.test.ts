@@ -406,3 +406,45 @@ describe('CANONICAL_ARTIFACTS', () => {
     }
   });
 });
+
+describe('renderRemediationMarkdown — plan.md completeness', () => {
+  it('plan.md contains entries for all 19 canonical artifacts', async () => {
+    const plan = await buildRemediationPlan(scored(), '/repo');
+    const md = renderRemediationMarkdown(plan);
+    for (const artifact of CANONICAL_ARTIFACTS) {
+      expect(md).toContain(`### ${artifact.filename}`);
+    }
+  });
+
+  it('README.md never appears as a plan.md target', async () => {
+    const plan = await buildRemediationPlan(scored(), '/repo');
+    const md = renderRemediationMarkdown(plan);
+    expect(md).not.toContain('### README.md');
+  });
+
+  it('plan.md never contains .aiready/plan.md as target', async () => {
+    const plan = await buildRemediationPlan(scored(), '/repo');
+    const md = renderRemediationMarkdown(plan);
+    const generateSection = md.split('## GENERATE')[1]?.split('## IMPROVE')[0] ?? '';
+    const improveSection = md.split('## IMPROVE')[1]?.split('## SKIP')[0] ?? '';
+    expect(generateSection).not.toContain('### .aiready/plan.md');
+    expect(improveSection).not.toContain('### .aiready/plan.md');
+  });
+
+  it('generateOnly artifacts in GENERATE show template copy notation', async () => {
+    const plan = await buildRemediationPlan(scored(), '/repo');
+    const md = renderRemediationMarkdown(plan);
+    // Makefile is generateOnly and missing → should be in GENERATE with template copy
+    expect(md).toContain('### Makefile');
+    expect(md).toContain('(template copy — no source context needed)');
+  });
+
+  it('non-generateOnly artifacts in GENERATE show source_files', async () => {
+    // AGENTS.md missing → GENERATE with source_files
+    const plan = await buildRemediationPlan(scored(), '/repo');
+    const md = renderRemediationMarkdown(plan);
+    const agentsBlock = md.split('### AGENTS.md')[1]?.split('###')[0] ?? '';
+    expect(agentsBlock).toContain('- source_files:');
+    expect(agentsBlock).not.toContain('template copy');
+  });
+});

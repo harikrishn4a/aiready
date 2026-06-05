@@ -15,6 +15,7 @@ export interface RemediationItem {
   write_policy?: string[];
   score?: number;
   findings?: string[];
+  generateOnly?: boolean;
 }
 
 export interface ImproveItem extends RemediationItem {
@@ -330,7 +331,7 @@ function makeGenerateItem(
   def: CanonicalArtifactDef,
   subsystemData: SubsystemScore | null,
 ): RemediationItem {
-  const sourceFiles = usefulSourcesForArtifact(target, def, subsystemData);
+  const sourceFiles = def.generateOnly ? [] : usefulSourcesForArtifact(target, def, subsystemData);
   return {
     filename: def.filename,
     subsystem: def.subsystem,
@@ -339,6 +340,7 @@ function makeGenerateItem(
     source_signals: def.defaultSources,
     max_lines: MAX_LINES,
     use_as_sources: sourceFiles,
+    generateOnly: def.generateOnly,
     write_policy: [
       'create only if missing',
       'do not overwrite an existing user file without --force',
@@ -482,8 +484,12 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
       lines.push(`### ${item.filename}`);
       lines.push(`- subsystem: ${item.subsystem ?? 'n/a'}`);
       lines.push(`- template: ${item.template}`);
-      const srcFiles = item.use_as_sources?.length ? item.use_as_sources : item.source_signals;
-      lines.push(`- source_files: ${srcFiles.join(', ')}`);
+      if (item.generateOnly) {
+        lines.push('- source_files: (template copy — no source context needed)');
+      } else {
+        const srcFiles = item.use_as_sources?.length ? item.use_as_sources : item.source_signals;
+        lines.push(`- source_files: ${srcFiles.join(', ')}`);
+      }
       lines.push(`- required: ${item.required_sections.join(', ')}`);
       lines.push('');
     }
