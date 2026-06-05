@@ -50,20 +50,29 @@ export interface InitPlan {
 }
 
 const BLANK_TEMPLATE_FILES = new Set([
-  'TASK.md', 'features.md', 'feature_list.json', 'QUALITY.md',
+  'TASK.md', 'features.md', 'feature_list.json', 'feature-list-schema.json',
+  'QUALITY.md', 'quality-document.md', 'evaluator_rubric.md',
+  'clean-state-checklist.md', 'startup.md',
+  'Makefile', 'scripts/init.sh', 'scripts/verify.sh',
 ]);
 
 const TEMPLATE_BY_FILENAME: Record<string, string> = {
   'AGENTS.md': 'examples/agents.md',
-  'CONSTRAINTS.md': 'examples/constraints.md',
   'ARCHITECTURE.md': 'examples/architecture.md',
   'DECISIONS.md': 'examples/decisions.md',
+  'structure.md': 'examples/structure.md',
+  'CONSTRAINTS.md': 'examples/constraints.md',
   'PROGRESS.md': 'examples/progress.md',
   'SESSION-HANDOFF.md': 'examples/session-handoff.md',
   'TASK.md': 'examples/task.md',
   'features.md': 'examples/features.md',
   'feature_list.json': 'examples/feature-list.json',
+  'feature-list-schema.json': 'examples/feature-list-schema.json',
   'QUALITY.md': 'examples/quality.md',
+  'quality-document.md': 'examples/quality-document.md',
+  'evaluator_rubric.md': 'examples/evaluator_rubric.md',
+  'clean-state-checklist.md': 'examples/clean-state-checklist.md',
+  'startup.md': 'examples/startup.md',
   'Makefile': 'examples/Makefile',
   'scripts/init.sh': 'examples/scripts/init.sh',
   'scripts/verify.sh': 'examples/scripts/verify.sh',

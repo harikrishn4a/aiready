@@ -6,6 +6,8 @@ import {
   buildRemediationPlan,
   renderRemediationMarkdown,
   writeRemediationPlan,
+  CANONICAL_ARTIFACTS,
+  SOURCE_ONLY_FILES,
 } from '../src/audit/remediation';
 import type { ScoredResult, SubsystemScore } from '../src/audit/scorer';
 
@@ -183,26 +185,50 @@ describe('buildRemediationPlan', () => {
     });
   });
 
-  it('canonical file with score >= 80 goes to skip', async () => {
+  it('non-generateOnly file always goes to improve regardless of score', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aiready-test-'));
     try {
-      writeFileSync(join(dir, 'AGENTS.md'), '# Agents');
+      writeFileSync(join(dir, 'AGENTS.md'), '# Agents\n\n## What this is\nA project.');
       const plan = await buildRemediationPlan(
         scored({ identity: sub(85, ['AGENTS.md']) }),
         dir,
       );
-      expect(plan.skip.some((i) => i.filename === 'AGENTS.md')).toBe(true);
+      expect(plan.improve.some((i) => i.filename === 'AGENTS.md')).toBe(true);
+      expect(plan.skip.map((i) => i.filename)).not.toContain('AGENTS.md');
       expect(plan.generate.map((i) => i.filename)).not.toContain('AGENTS.md');
-      expect(plan.improve.map((i) => i.filename)).not.toContain('AGENTS.md');
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
   });
 
-  it('all 13 canonical artifacts appear across generate/improve/skip', async () => {
+  it('generateOnly file with content goes to skip', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aiready-test-'));
     try {
-      writeFileSync(join(dir, 'AGENTS.md'), '# Agents');
+      writeFileSync(join(dir, 'Makefile'), 'setup:\n\tnpm ci\ndev:\n\tnpm run dev\ncheck:\n\tnpm run typecheck\ntest:\n\tnpm test\nlint:\n\tnpm run lint\nclean:\n\trm -rf dist\n');
+      const plan = await buildRemediationPlan(scored(), dir);
+      expect(plan.skip.some((i) => i.filename === 'Makefile')).toBe(true);
+      expect(plan.generate.map((i) => i.filename)).not.toContain('Makefile');
+      expect(plan.improve.map((i) => i.filename)).not.toContain('Makefile');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('generateOnly file that is empty goes to generate', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aiready-test-'));
+    try {
+      writeFileSync(join(dir, 'TASK.md'), '');
+      const plan = await buildRemediationPlan(scored(), dir);
+      expect(plan.generate.some((i) => i.filename === 'TASK.md')).toBe(true);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('all 19 canonical artifacts appear across generate/improve/skip', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aiready-test-'));
+    try {
+      writeFileSync(join(dir, 'AGENTS.md'), '# Agents\n\nReal content here for testing.');
       const plan = await buildRemediationPlan(scored({ identity: sub(45, ['AGENTS.md']) }), dir);
       const all = [
         ...plan.generate.map((i) => i.filename),
@@ -210,10 +236,13 @@ describe('buildRemediationPlan', () => {
         ...plan.skip.map((i) => i.filename),
       ];
       const expected = [
-        'AGENTS.md', 'CONSTRAINTS.md', 'ARCHITECTURE.md', 'DECISIONS.md',
+        'AGENTS.md', 'CONSTRAINTS.md', 'ARCHITECTURE.md', 'DECISIONS.md', 'structure.md',
         'PROGRESS.md', 'SESSION-HANDOFF.md', 'TASK.md', 'features.md',
-        'feature_list.json', 'QUALITY.md', 'Makefile', 'scripts/init.sh', 'scripts/verify.sh',
+        'feature_list.json', 'feature-list-schema.json', 'QUALITY.md',
+        'quality-document.md', 'evaluator_rubric.md', 'clean-state-checklist.md',
+        'startup.md', 'Makefile', 'scripts/init.sh', 'scripts/verify.sh',
       ];
+      expect(all).toHaveLength(19);
       for (const name of expected) {
         expect(all).toContain(name);
       }
@@ -326,6 +355,54 @@ describe('writeRemediationPlan', () => {
       expect(readFileSync(planPath, 'utf8')).toContain('# AIReady Plan');
     } finally {
       rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('CANONICAL_ARTIFACTS', () => {
+  it('has exactly 19 entries', () => {
+    expect(CANONICAL_ARTIFACTS).toHaveLength(19);
+  });
+
+  it('source-only files are never in canonical set', () => {
+    const filenames = CANONICAL_ARTIFACTS.map((a) => a.filename);
+    for (const f of SOURCE_ONLY_FILES) {
+      expect(filenames).not.toContain(f);
+    }
+  });
+
+  it('Makefile is generateOnly', () => {
+    const makefile = CANONICAL_ARTIFACTS.find((a) => a.filename === 'Makefile');
+    expect(makefile?.generateOnly).toBe(true);
+  });
+
+  it('AGENTS.md is not generateOnly', () => {
+    const agents = CANONICAL_ARTIFACTS.find((a) => a.filename === 'AGENTS.md');
+    expect(agents?.generateOnly).toBe(false);
+  });
+
+  it('scripts/init.sh is generateOnly with null subsystem', () => {
+    const initSh = CANONICAL_ARTIFACTS.find((a) => a.filename === 'scripts/init.sh');
+    expect(initSh?.generateOnly).toBe(true);
+    expect(initSh?.subsystem).toBeNull();
+  });
+
+  it('structure.md is not generateOnly', () => {
+    const structure = CANONICAL_ARTIFACTS.find((a) => a.filename === 'structure.md');
+    expect(structure?.generateOnly).toBe(false);
+    expect(structure?.subsystem).toBe('memory');
+  });
+
+  it('startup.md is generateOnly with verification subsystem', () => {
+    const startup = CANONICAL_ARTIFACTS.find((a) => a.filename === 'startup.md');
+    expect(startup?.generateOnly).toBe(true);
+    expect(startup?.subsystem).toBe('verification');
+  });
+
+  it('all generateOnly artifacts have a template path', () => {
+    const generateOnly = CANONICAL_ARTIFACTS.filter((a) => a.generateOnly);
+    for (const a of generateOnly) {
+      expect(a.template.length).toBeGreaterThan(0);
     }
   });
 });

@@ -26,7 +26,10 @@ CRITICAL RULES:
 - Keep output under 300 lines unless template requires more`;
 
 const BLANK_TEMPLATE_FILES = new Set([
-  'TASK.md', 'features.md', 'feature_list.json', 'QUALITY.md',
+  'TASK.md', 'features.md', 'feature_list.json', 'feature-list-schema.json',
+  'QUALITY.md', 'quality-document.md', 'evaluator_rubric.md',
+  'clean-state-checklist.md', 'startup.md',
+  'Makefile', 'scripts/init.sh', 'scripts/verify.sh',
 ]);
 
 function readCapped(filePath: string, cap = 4000): string | null {

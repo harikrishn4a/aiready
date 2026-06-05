@@ -1,6 +1,9 @@
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import { readFile } from 'fs/promises';
-import { existsSync } from 'fs';
-import { parsePlanContent, isAlwaysGenerate } from './parser.js';
+import { parsePlanContent } from './parser.js';
+import { CANONICAL_ARTIFACTS, isEmpty } from '../audit/remediation.js';
+import type { CanonicalArtifactDef } from '../audit/remediation.js';
 
 export interface ArtifactPlan {
   filename: string;
@@ -11,6 +14,7 @@ export interface ArtifactPlan {
   currentScore: number | null;
   reason: string;
   alwaysGenerate: boolean;
+  generateOnly: boolean;
 }
 
 export interface InitPlan {
@@ -19,6 +23,19 @@ export interface InitPlan {
   artifacts: ArtifactPlan[];
   subsystemSources: Record<string, string[]>;
   sourceContext: Array<{ path: string; subsystems: string[]; reason: string }>;
+}
+
+function getSourceFiles(
+  artifact: CanonicalArtifactDef,
+  subsystemSources: Record<string, string[]>,
+  target: string,
+): string[] {
+  const subSources = artifact.subsystem ? (subsystemSources[artifact.subsystem] ?? []) : [];
+  const defaults = artifact.defaultSources;
+  const candidates = [...new Set([...subSources, ...defaults])];
+  return candidates.filter(
+    (f) => f !== artifact.filename && existsSync(join(target, f)),
+  );
 }
 
 export async function buildInitPlan(planPath: string, target: string): Promise<InitPlan> {
@@ -40,44 +57,67 @@ export async function buildInitPlan(planPath: string, target: string): Promise<I
 
   const artifacts: ArtifactPlan[] = [];
 
-  for (const item of parsed.generate) {
-    const score = item.subsystem ? (parsed.subsystemScores[item.subsystem] ?? null) : null;
-    artifacts.push({
-      filename: item.filename,
-      action: 'generate',
-      subsystem: item.subsystem || null,
-      templateFile: item.templateFile,
-      sourceFiles: item.sourceFiles,
-      currentScore: score,
-      reason: item.required || 'generate from plan',
-      alwaysGenerate: isAlwaysGenerate(item.filename),
-    });
-  }
+  for (const artifact of CANONICAL_ARTIFACTS) {
+    const filePath = join(target, artifact.filename);
+    const fileExists = existsSync(filePath);
 
-  for (const item of parsed.improve) {
-    const score = item.subsystem ? (parsed.subsystemScores[item.subsystem] ?? null) : null;
+    if (!fileExists) {
+      artifacts.push({
+        filename: artifact.filename,
+        action: 'generate',
+        subsystem: artifact.subsystem,
+        templateFile: artifact.template,
+        sourceFiles: getSourceFiles(artifact, parsed.subsystemSources, target),
+        currentScore: artifact.subsystem ? (parsed.subsystemScores[artifact.subsystem] ?? null) : null,
+        reason: 'file does not exist',
+        alwaysGenerate: false,
+        generateOnly: artifact.generateOnly,
+      });
+      continue;
+    }
+
+    if (artifact.generateOnly) {
+      let fileContent = '';
+      try { fileContent = readFileSync(filePath, 'utf-8'); } catch { /* ignore */ }
+      if (isEmpty(fileContent)) {
+        artifacts.push({
+          filename: artifact.filename,
+          action: 'generate',
+          subsystem: artifact.subsystem,
+          templateFile: artifact.template,
+          sourceFiles: getSourceFiles(artifact, parsed.subsystemSources, target),
+          currentScore: null,
+          reason: 'file exists but is empty',
+          alwaysGenerate: true,
+          generateOnly: artifact.generateOnly,
+        });
+      } else {
+        artifacts.push({
+          filename: artifact.filename,
+          action: 'skip',
+          subsystem: artifact.subsystem,
+          templateFile: artifact.template,
+          sourceFiles: [],
+          currentScore: null,
+          reason: 'generate-only — file exists with content',
+          alwaysGenerate: false,
+          generateOnly: artifact.generateOnly,
+        });
+      }
+      continue;
+    }
+
+    // Non-generateOnly: always improve if exists
     artifacts.push({
-      filename: item.filename,
+      filename: artifact.filename,
       action: 'improve',
-      subsystem: item.subsystem || null,
-      templateFile: item.templateFile,
-      sourceFiles: item.sourceFiles,
-      currentScore: score,
-      reason: item.fix || item.missing || 'improve from plan',
+      subsystem: artifact.subsystem,
+      templateFile: artifact.template,
+      sourceFiles: getSourceFiles(artifact, parsed.subsystemSources, target),
+      currentScore: artifact.subsystem ? (parsed.subsystemScores[artifact.subsystem] ?? null) : null,
+      reason: 'always improve',
       alwaysGenerate: false,
-    });
-  }
-
-  for (const item of parsed.skip) {
-    artifacts.push({
-      filename: item.filename,
-      action: 'skip',
-      subsystem: null,
-      templateFile: '',
-      sourceFiles: [],
-      currentScore: item.score,
-      reason: item.reason,
-      alwaysGenerate: false,
+      generateOnly: artifact.generateOnly,
     });
   }
 
