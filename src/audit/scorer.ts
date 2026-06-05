@@ -1,10 +1,18 @@
+import { basename } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import { resolveExamplesDir } from '../utils/examples-dir.js';
 import type { RepoFiles } from './loader.js';
 import type { FileMapping, Subsystem } from './mapper.js';
 import { crossRef } from './cross-ref.js';
 import type { CrossRefResult } from './cross-ref.js';
-import { loadTemplates, extractSectionHeadings, TEMPLATE_SUBSYSTEM_MAP } from './templates.js';
+import {
+  loadTemplates, extractSectionHeadings, TEMPLATE_SUBSYSTEM_MAP,
+  detectFileType,
+  REQUIRED_MAKEFILE_TARGETS,
+  REQUIRED_INIT_SH_PATTERNS,
+  REQUIRED_VERIFY_SH_PATTERNS,
+  REQUIRED_JSON_KEYS,
+} from './templates.js';
 import type { LoadedTemplates } from './templates.js';
 
 export interface SubsystemScore {
@@ -115,15 +123,102 @@ function normalizeFindings(entry: LLMScoreEntry): Finding[] {
   return [];
 }
 
-export function scoreStructural(
-  fileContent: string,
+export function scoreMakefileStructure(
+  content: string,
+): { score: number; present: string[]; missing: string[] } {
+  const definedTargets = (content.match(/^[a-zA-Z][a-zA-Z0-9_-]*:/gm) ?? [])
+    .map((t) => t.replace(':', '').trim());
+
+  const present: string[] = [];
+  const missing: string[] = [];
+
+  for (const required of REQUIRED_MAKEFILE_TARGETS) {
+    const options = required.split('|');
+    const found = options.find((opt) => definedTargets.includes(opt));
+    if (found) present.push(found);
+    else missing.push(required);
+  }
+
+  return {
+    score: Math.round((present.length / REQUIRED_MAKEFILE_TARGETS.length) * 100),
+    present,
+    missing,
+  };
+}
+
+export function scoreShellStructure(
+  filename: string,
+  content: string,
+): { score: number; present: string[]; missing: string[] } {
+  const base = basename(filename);
+  const patterns = base.includes('init') ? REQUIRED_INIT_SH_PATTERNS : REQUIRED_VERIFY_SH_PATTERNS;
+  const present: string[] = [];
+  const missing: string[] = [];
+
+  for (const pattern of patterns) {
+    if (pattern.test(content)) present.push(pattern.source);
+    else missing.push(pattern.source);
+  }
+
+  return {
+    score: Math.round((present.length / patterns.length) * 100),
+    present,
+    missing,
+  };
+}
+
+export function scoreJsonStructure(
+  filename: string,
+  content: string,
+): { score: number; present: string[]; missing: string[] } {
+  const base = basename(filename);
+  const requiredKeys = REQUIRED_JSON_KEYS[base] ?? [];
+
+  if (requiredKeys.length === 0) return { score: 100, present: [], missing: [] };
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(content) as Record<string, unknown>;
+  } catch {
+    return { score: 0, present: [], missing: requiredKeys };
+  }
+
+  const present = requiredKeys.filter((k) => k in parsed);
+  const missing = requiredKeys.filter((k) => !(k in parsed));
+  return {
+    score: Math.round((present.length / requiredKeys.length) * 100),
+    present,
+    missing,
+  };
+}
+
+export function scoreArchitectureStructure(
+  content: string,
+): { score: number; present: string[]; missing: string[] } {
+  const checks = [
+    { name: 'Responsibilities sections', pass: /Responsibilities/i.test(content) },
+    { name: 'Must NOT boundaries',       pass: /Must NOT|MUST NOT/i.test(content) },
+    { name: 'Module map or table',       pass: /\|.*\|.*\|/m.test(content) },
+    { name: 'Data flow documentation',   pass: /→|->|data flow|pipeline/i.test(content) },
+  ];
+  const present = checks.filter((c) => c.pass).map((c) => c.name);
+  const missing = checks.filter((c) => !c.pass).map((c) => c.name);
+  return {
+    score: Math.round((present.length / checks.length) * 100),
+    present,
+    missing,
+  };
+}
+
+function scoreMarkdownStructure(
+  content: string,
   templateSections: string[],
 ): { score: number; present: string[]; missing: string[] } {
   if (templateSections.length === 0) {
     return { score: 0, present: [], missing: [] };
   }
 
-  const fileSections = extractSectionHeadings(fileContent);
+  const fileSections = extractSectionHeadings(content);
   const present: string[] = [];
   const missing: string[] = [];
 
@@ -141,6 +236,29 @@ export function scoreStructural(
     present,
     missing,
   };
+}
+
+export function scoreStructural(
+  filename: string,
+  fileContent: string,
+  templateSections: string[],
+): { score: number; present: string[]; missing: string[] } {
+  const fileType = detectFileType(filename);
+  switch (fileType) {
+    case 'makefile':
+      return scoreMakefileStructure(fileContent);
+    case 'shell':
+      return scoreShellStructure(filename, fileContent);
+    case 'json':
+      return scoreJsonStructure(filename, fileContent);
+    case 'markdown': {
+      const base = basename(filename).toLowerCase();
+      if (base === 'architecture.md') return scoreArchitectureStructure(fileContent);
+      return scoreMarkdownStructure(fileContent, templateSections);
+    }
+    default:
+      return scoreMarkdownStructure(fileContent, templateSections);
+  }
 }
 
 export function combineScores(structuralScore: number, contentScore: number): number {
@@ -166,16 +284,17 @@ function buildSubsystemContent(
   subsystem: Subsystem,
   mdFiles: RepoFiles['mdFiles'],
   mappings: FileMapping[],
-): { files: string[]; content: string } {
+): { files: string[]; content: string; fileContents: Map<string, string> } {
   const mappedPaths = mappings.filter((m) => m.subsystems.includes(subsystem)).map((m) => m.path);
-  if (mappedPaths.length === 0) return { files: [], content: '' };
+  if (mappedPaths.length === 0) return { files: [], content: '', fileContents: new Map() };
 
   const fileMap = new Map(mdFiles.map((f) => [f.path, f.fullContent]));
   const sections = mappedPaths.map((p) => {
     const content = fileMap.get(p) ?? '';
     return `=== ${p} ===\n${content}`;
   });
-  return { files: mappedPaths, content: sections.join('\n\n') };
+  const fileContents = new Map(mappedPaths.map((p) => [p, fileMap.get(p) ?? '']));
+  return { files: mappedPaths, content: sections.join('\n\n'), fileContents };
 }
 
 function getTemplateSectionsForSubsystem(subsystem: string, templates: LoadedTemplates): string[] {
@@ -204,12 +323,18 @@ export async function scoreRepo(
 
   // Compute structural scores deterministically (no LLM needed)
   const structuralScores: Record<string, ReturnType<typeof scoreStructural>> = {};
-  for (const { subsystem, files: subsysFiles, content } of subsystemContents) {
+  for (const { subsystem, files: subsysFiles, fileContents } of subsystemContents) {
     const templateSections = getTemplateSectionsForSubsystem(subsystem, templates);
-    if (subsysFiles.length === 0 || !content) {
+    if (subsysFiles.length === 0) {
       structuralScores[subsystem] = { score: 0, present: [], missing: templateSections };
     } else {
-      structuralScores[subsystem] = scoreStructural(content, templateSections);
+      const perFile = subsysFiles.map((f) =>
+        scoreStructural(f, fileContents.get(f) ?? '', templateSections),
+      );
+      const avgScore = Math.round(perFile.reduce((sum, r) => sum + r.score, 0) / perFile.length);
+      const present = [...new Set(perFile.flatMap((r) => r.present))];
+      const missing = [...new Set(perFile.flatMap((r) => r.missing))].filter((m) => !present.includes(m));
+      structuralScores[subsystem] = { score: avgScore, present, missing };
     }
   }
 
