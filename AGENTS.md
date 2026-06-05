@@ -7,36 +7,27 @@
 ## What this is
 CLI tool that audits repositories for AI agent readiness and generates
 harness artifacts so coding agents can work effectively across sessions.
-Outputs AGENTS.md, module docs, verification commands, and session state
-files. Distributed via npx — zero install required.
+Distributed via npx — zero install required.
 
 ## Product stages
-AIReady is built in 5 stages. Each stage is a separate src/ module.
-Do not implement code for a future stage while working on the current one.
 
 | Stage | Command | What it does | Status |
 |---|---|---|---|
-| 1 | `npx aiready audit` | Deterministic repo audit — scores 5 harness subsystems, no LLM | **current** |
-| 2 | `npx aiready init` | Generates missing harness artifacts from actual code, LLM-assisted | not started |
-| 3 | `npx aiready analyze` | Semantic gap analysis — finds undocumented intent in code | not started |
-| 4 | `npx aiready drift` | Detects stale docs vs code changes over time | not started |
-| 5 | `npx aiready fix` | Auto-remediates gaps found by audit, analyze, or drift | not started |
+| 1 | `npx aiready audit` | LLM-powered audit — scores 5 harness subsystems, writes `.aiready/plan.md` | **complete** |
+| 2 | `npx aiready init` | Reads plan.md + source context, generates missing harness artifacts | **current** |
+| 3 | `npx aiready analyze` | Reads code + Graphify graph, finds undocumented intent, writes `.aiready/gaps.md` | not started |
+| 4 | `npx aiready drift` | Reads harness + git history, finds stale docs, writes `.aiready/drift.md` | not started |
+| 5 | `npx aiready fix` | Reads plan/gaps/drift, patches exactly what's wrong, shows diff before write | not started |
 
 See `ARCHITECTURE.md` for full design detail on each stage.
 
 ## Current stage
-Stage 1 — deterministic repo audit. No LLM. Scores a repo against 5
-harness subsystems and outputs a gap report to terminal.
+Stage 2 — `npx aiready init`
 
-The 5 subsystems scored:
-- **identity** — does an agent know what this project is and does?
-- **verification** — can an agent confirm its work is correct?
-- **state** — can an agent resume a session without starting blind?
-- **memory** — can an agent navigate the codebase without exploring?
-- **constraints** — does an agent know what it must never do?
-
-Current status: scaffolding phase. No src/ yet.
-See PROGRESS.md for task breakdown.
+Reads `.aiready/plan.md` (written by Stage 1) and source context files
+listed in the plan. Generates or improves missing harness artifacts using
+the LLM. Each generated artifact is capped at 300 lines. Never overwrites
+existing files unless `--force` is passed.
 
 ## Stack
 - Node.js 20+, TypeScript (strict)
@@ -44,20 +35,36 @@ See PROGRESS.md for task breakdown.
 - Vitest — testing
 - tsup — build/bundle to dist/
 - ESLint — linting
-- No LLM dependencies in Stage 1
+- `@anthropic-ai/sdk`, `openai` — LLM providers (Anthropic, OpenAI, Ollama)
+- `@inquirer/prompts` — interactive provider/model selection
+- `dotenv` — `.env` file loading
 
 ## Repo structure
 ```
 aiready/
   src/
-    audit/           ← Stage 1: scoring logic
-    init/            ← Stage 2: file generation (stub only)
-    analyze/         ← Stage 3: semantic gap analysis (stub only)
-    drift/           ← Stage 4: drift detection (stub only)
-    fix/             ← Stage 5: auto-remediation (stub only)
-    cli.ts           ← entrypoint, Commander setup
-    utils/           ← shared helpers
-  examples/          ← harness templates (reference, not src)
+    audit/           ← Stage 1: LLM audit pipeline
+      index.ts       ← audit command handler
+      loader.ts      ← reads repo files, Graphify integration
+      mapper.ts      ← triage + classify markdown files to subsystems
+      scorer.ts      ← LLM quality scoring per subsystem
+      cross-ref.ts   ← validates docs vs project reality
+      reporter.ts    ← terminal + JSON output
+      remediation.ts ← generates .aiready/plan.md
+    init/            ← Stage 2: artifact generation (in progress)
+    analyze/         ← Stage 3: semantic gap analysis (stub)
+    drift/           ← Stage 4: drift detection (stub)
+    fix/             ← Stage 5: auto-remediation (stub)
+    cli.ts           ← Commander entrypoint
+    utils/
+      llm.ts         ← LLMProvider interface + Anthropic/OpenAI/Ollama impls
+      prompt.ts      ← interactive provider/model selection
+      models.ts      ← versioned model lists
+      tokens.ts      ← token estimation
+      spinner.ts     ← TTY-only sea-green spinner
+      fs.ts          ← filesystem helpers
+      detect.ts      ← stack and package manager detection
+  examples/          ← harness templates (reference for Stage 2 generation)
   tests/
   AGENTS.md          ← this file
   PROGRESS.md        ← project state
@@ -65,7 +72,6 @@ aiready/
   DECISIONS.md       ← key design choices with rationale
   ARCHITECTURE.md    ← full stage design and data flow
   feature_list.json  ← feature tracker
-  features.md        ← feature definitions
 ```
 
 ---
@@ -85,10 +91,14 @@ If baseline verification is failing, repair that first before adding new scope.
 ## Session end
 1. Run full verification (see Verification Commands below)
 2. Update `PROGRESS.md` if a feature completed, was added, or got blocked
-3. Update `features.md` — check off completed tasks, add implementation notes
-4. Update `feature_list.json` — set new status and record evidence
-5. Overwrite `SESSION-HANDOFF.md` with this session's state
-6. If a key decision was made, append it to `DECISIONS.md`
+3. Update `feature_list.json` — set new status and record evidence
+4. Overwrite `SESSION-HANDOFF.md` with this session's state
+5. If a key decision was made, append it to `DECISIONS.md`
+6. **Update `ARCHITECTURE.md`** if any of the following changed:
+   - A new module was added or renamed
+   - A stage pipeline changed
+   - A layer boundary rule changed
+   - The product stage table changed (status, command, description)
 7. Commit with a descriptive message — leave a clean restart path
 
 ## Working rules
@@ -103,7 +113,6 @@ If baseline verification is failing, repair that first before adding new scope.
 A feature moves to `passing` only when ALL of the following are true:
 - [ ] Target behavior is implemented
 - [ ] All verification commands pass (see below)
-- [ ] Tasks checked off in `features.md`
 - [ ] Evidence recorded in `feature_list.json`
 - [ ] Repository is restartable from `npm run build && npm test`
 
@@ -117,18 +126,18 @@ npm test          # vitest, must pass
 
 ## Escalation
 - **Architecture decisions**: Check `DECISIONS.md`, then ask the user
-- **Unclear requirements**: Check `features.md` for the feature definition, then ask the user
+- **Unclear requirements**: Check `SESSION-HANDOFF.md` and `TASK.md`, then ask the user
 - **Repeated failures**: Mark feature as blocked in `feature_list.json`, flag for human review
 - **Scope ambiguity**: Re-read `TASK.md` sprint contract before expanding scope
 
 ## Constraints — never do these
 - MUST NOT write to the target repo without `--force` or explicit user confirmation
 - MUST NOT run verification commands in the target repo automatically
-- MUST NOT overwrite existing harness files unless `--force` is passed
-- MUST NOT make API calls or network requests in Stage 1 — LLM-free only
+- MUST NOT overwrite existing harness files in the target repo unless `--force` is passed
 - MUST NOT add new dependencies without recording the decision in `DECISIONS.md`
 - MUST NOT claim completion without runnable evidence
-- MUST NOT implement Stage 2+ code while Stage 1 is in progress
+- MUST NOT implement a future stage while the current stage is in progress
+- MUST NOT let `ARCHITECTURE.md` drift — update it at session end when anything structural changes
 
 ## Error message format
 All errors emitted by the CLI must follow this structure:
