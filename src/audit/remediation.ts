@@ -1,11 +1,11 @@
 import { dirname, join } from 'path';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync } from 'fs';
 import type { ScoredResult, SubsystemScore } from './scorer.js';
 import type { Subsystem } from './mapper.js';
 
 export interface RemediationItem {
   filename: string;
-  subsystem: Subsystem;
+  subsystem: Subsystem | null;
   template: string;
   required_sections: string[];
   source_signals: string[];
@@ -24,6 +24,13 @@ export interface ImproveItem extends RemediationItem {
   template_section: string;
 }
 
+export interface SkipItem {
+  filename: string;
+  subsystem: Subsystem | null;
+  score: number | null;
+  reason: string;
+}
+
 export interface ManualReviewItem {
   path: string;
   reason: string;
@@ -38,91 +45,159 @@ export interface RemediationPlan {
   overall: number;
   generate: RemediationItem[];
   improve: ImproveItem[];
+  skip: SkipItem[];
   source_context: ManualReviewItem[];
   subsystemScores: Record<string, number>;
   subsystemSources: Record<string, string[]>;
 }
 
 const MAX_LINES = 300;
+const SKIP_THRESHOLD = 80;
 
-// Canonical harness artifact names — these can be IMPROVED when weak
-const CANONICAL_NAMES = new Set([
-  'AGENTS.md', 'CLAUDE.md', 'AGENT.md',
-  '.cursorrules', '.windsurfrules', '.github/copilot-instructions.md',
-  'PROGRESS.md', 'STATUS.md', 'TODO.md',
-  'ARCHITECTURE.md', 'STRUCTURE.md',
-  'CONSTRAINTS.md', 'RULES.md',
-  'DECISIONS.md',
-  'SESSION-HANDOFF.md', 'HANDOFF.md',
-  'TASK.md',
-]);
-
-// plan.md is an AIReady internal file — never a generate/improve target
 function isPlanFile(file: string): boolean {
   return file === 'plan.md' || file === '.aiready/plan.md' || file.endsWith('/.aiready/plan.md');
 }
 
-interface ArtifactDef {
+interface CanonicalArtifactDef {
   filename: string;
+  subsystem: Subsystem | null;
   template: string;
   required: string;
   defaultSources: string[];
+  sectionName: string;
+  templateSection: string;
 }
 
-const ARTIFACT_BY_SUBSYSTEM: Record<Subsystem, ArtifactDef> = {
-  identity: {
+const CANONICAL_ARTIFACTS: CanonicalArtifactDef[] = [
+  {
     filename: 'AGENTS.md',
+    subsystem: 'identity',
     template: 'examples/agents.md',
     required: 'project description, stack with versions, verification commands, repo structure',
     defaultSources: ['README.md', 'package.json'],
+    sectionName: 'agent entry point',
+    templateSection: 'examples/agents.md → project overview',
   },
-  verification: {
-    filename: 'AGENTS.md',
-    template: 'examples/agents.md',
-    required: 'runnable build/test/lint commands, single canonical verification path',
-    defaultSources: ['package.json'],
+  {
+    filename: 'CONSTRAINTS.md',
+    subsystem: 'constraints',
+    template: 'examples/constraints.md',
+    required: 'MUST/MUST NOT language, forbidden actions, domain-specific rules',
+    defaultSources: ['AGENTS.md', 'package.json'],
+    sectionName: 'hard constraints',
+    templateSection: 'examples/constraints.md → MUST / MUST NOT rules',
   },
-  state: {
-    filename: 'PROGRESS.md',
-    template: 'examples/progress.md',
-    required: 'current build status, completed/in-progress/blocked tasks, next best step',
-    defaultSources: ['package.json'],
-  },
-  memory: {
+  {
     filename: 'ARCHITECTURE.md',
+    subsystem: 'memory',
     template: 'examples/architecture.md',
     required: 'module map, module responsibilities, data flow',
     defaultSources: ['package.json'],
+    sectionName: 'module map',
+    templateSection: 'examples/architecture.md → module map',
   },
-  constraints: {
-    filename: 'CONSTRAINTS.md',
-    template: 'examples/constraints.md',
-    required: 'MUST/MUST NOT language, forbidden actions, domain-specific rules',
+  {
+    filename: 'DECISIONS.md',
+    subsystem: null,
+    template: 'examples/decisions.md',
+    required: 'key decisions, rationale, alternatives considered',
+    defaultSources: ['AGENTS.md', 'package.json'],
+    sectionName: 'decisions log',
+    templateSection: 'examples/decisions.md → decisions',
+  },
+  {
+    filename: 'PROGRESS.md',
+    subsystem: 'state',
+    template: 'examples/progress.md',
+    required: 'current build status, completed/in-progress/blocked tasks, next best step',
     defaultSources: ['package.json'],
+    sectionName: 'current state section',
+    templateSection: 'examples/progress.md → Current State',
   },
-};
+  {
+    filename: 'SESSION-HANDOFF.md',
+    subsystem: 'state',
+    template: 'examples/session-handoff.md',
+    required: 'date, what was completed, what is broken, next best step',
+    defaultSources: ['PROGRESS.md', 'package.json'],
+    sectionName: 'session handoff',
+    templateSection: 'examples/session-handoff.md → handoff summary',
+  },
+  {
+    filename: 'TASK.md',
+    subsystem: null,
+    template: 'examples/task.md',
+    required: 'current task, scope, acceptance criteria',
+    defaultSources: ['PROGRESS.md'],
+    sectionName: 'task definition',
+    templateSection: 'examples/task.md → task',
+  },
+  {
+    filename: 'features.md',
+    subsystem: null,
+    template: 'examples/features.md',
+    required: 'feature list with status',
+    defaultSources: ['package.json'],
+    sectionName: 'feature list',
+    templateSection: 'examples/features.md → features',
+  },
+  {
+    filename: 'feature_list.json',
+    subsystem: null,
+    template: 'examples/feature-list.json',
+    required: 'JSON feature list with id, title, status fields',
+    defaultSources: ['features.md'],
+    sectionName: 'feature list JSON',
+    templateSection: 'examples/feature-list.json → schema',
+  },
+  {
+    filename: 'QUALITY.md',
+    subsystem: null,
+    template: 'examples/quality.md',
+    required: 'quality gates, test coverage requirements, definition of done',
+    defaultSources: ['package.json'],
+    sectionName: 'quality definition',
+    templateSection: 'examples/quality.md → quality gates',
+  },
+  {
+    filename: 'Makefile',
+    subsystem: 'verification',
+    template: 'examples/Makefile',
+    required: 'runnable build/test/lint commands, single canonical verification path',
+    defaultSources: ['package.json'],
+    sectionName: 'verification commands',
+    templateSection: 'examples/Makefile → verification commands',
+  },
+  {
+    filename: 'scripts/init.sh',
+    subsystem: 'verification',
+    template: 'examples/scripts/init.sh',
+    required: 'dependency setup, environment initialization',
+    defaultSources: ['package.json', 'Makefile'],
+    sectionName: 'init script',
+    templateSection: 'examples/scripts/init.sh → init',
+  },
+  {
+    filename: 'scripts/verify.sh',
+    subsystem: 'verification',
+    template: 'examples/scripts/verify.sh',
+    required: 'full verification sequence: build, typecheck, lint, test',
+    defaultSources: ['Makefile'],
+    sectionName: 'verify script',
+    templateSection: 'examples/scripts/verify.sh → verify',
+  },
+];
 
-const SECTION_BY_SUBSYSTEM: Record<Subsystem, string> = {
-  identity: 'agent entry point',
-  verification: 'verification section',
-  state: 'current state section',
-  memory: 'module map',
-  constraints: 'hard constraints',
-};
+const CANONICAL_NAMES = new Set(CANONICAL_ARTIFACTS.map((a) => a.filename));
 
-const TEMPLATE_SECTION_BY_SUBSYSTEM: Record<Subsystem, string> = {
-  identity: 'examples/agents.md → project overview',
-  verification: 'examples/agents.md → Verification Commands',
-  state: 'examples/progress.md → Current State',
-  memory: 'examples/architecture.md → module map',
-  constraints: 'examples/constraints.md → MUST / MUST NOT rules',
-};
-
-function makeGenerateItem(subsystem: Subsystem, sourceFiles: string[]): RemediationItem {
-  const def = ARTIFACT_BY_SUBSYSTEM[subsystem];
+function makeGenerateItem(def: CanonicalArtifactDef, subsystemData: SubsystemScore | null): RemediationItem {
+  const subsystemFiles = subsystemData
+    ? subsystemData.files.filter((f) => !isPlanFile(f) && f !== def.filename)
+    : [];
+  const sourceFiles = [...new Set([...subsystemFiles, ...def.defaultSources])];
   return {
     filename: def.filename,
-    subsystem,
+    subsystem: def.subsystem,
     template: def.template,
     required_sections: def.required.split(', '),
     source_signals: def.defaultSources,
@@ -136,36 +211,35 @@ function makeGenerateItem(subsystem: Subsystem, sourceFiles: string[]): Remediat
   };
 }
 
-function buildImproveItem(subsystem: Subsystem, data: SubsystemScore): ImproveItem {
-  const def = ARTIFACT_BY_SUBSYSTEM[subsystem];
-  const filename = data.files[0] ?? def.filename;
+function makeImproveItem(def: CanonicalArtifactDef, data: SubsystemScore): ImproveItem {
   const missing = data.gaps[0] ?? 'score below threshold';
   return {
-    filename,
-    subsystem,
+    filename: def.filename,
+    subsystem: def.subsystem,
     template: def.template,
     required_sections: def.required.split(', '),
     source_signals: def.defaultSources,
     max_lines: MAX_LINES,
     score: data.score,
     findings: data.findings.map((f) => `${f.type}: ${f.message}`),
-    why: `Existing ${SECTION_BY_SUBSYSTEM[subsystem]} scored ${data.score}/100.`,
-    use_as_sources: [...data.files],
+    why: `Existing ${def.sectionName} scored ${data.score}/100.`,
+    use_as_sources: [...new Set(data.files.filter((f) => !isPlanFile(f)))],
     write_policy: [
       'preserve existing useful content',
       'do not overwrite without --force',
       `keep artifact under ${MAX_LINES} lines`,
     ],
-    section: SECTION_BY_SUBSYSTEM[subsystem],
+    section: def.sectionName,
     missing,
-    fix: `Update ${SECTION_BY_SUBSYSTEM[subsystem]} using ${def.template}; keep the artifact under ${MAX_LINES} lines.`,
-    template_section: TEMPLATE_SECTION_BY_SUBSYSTEM[subsystem],
+    fix: `Update ${def.sectionName} using ${def.template}; keep the artifact under ${MAX_LINES} lines.`,
+    template_section: def.templateSection,
   };
 }
 
-export function buildRemediationPlan(scored: ScoredResult, target: string): RemediationPlan {
+export async function buildRemediationPlan(scored: ScoredResult, target: string): Promise<RemediationPlan> {
   const generate: RemediationItem[] = [];
   const improve: ImproveItem[] = [];
+  const skip: SkipItem[] = [];
   const source_context: ManualReviewItem[] = [];
   const subsystemScores: Record<string, number> = {};
   const subsystemSources: Record<string, string[]> = {};
@@ -174,30 +248,37 @@ export function buildRemediationPlan(scored: ScoredResult, target: string): Reme
     const data = scored[subsystem];
     subsystemScores[subsystem] = data.score;
     subsystemSources[subsystem] = data.files.filter((f) => !isPlanFile(f));
+  }
 
-    if (data.files.length === 0) {
-      generate.push(makeGenerateItem(subsystem, ARTIFACT_BY_SUBSYSTEM[subsystem].defaultSources));
-      continue;
+  for (const def of CANONICAL_ARTIFACTS) {
+    const filePath = join(target, def.filename);
+    const fileExists = existsSync(filePath);
+    const subsystemData = def.subsystem ? scored[def.subsystem] : null;
+    const score = subsystemData?.score ?? null;
+
+    if (!fileExists) {
+      generate.push(makeGenerateItem(def, subsystemData));
+    } else if (score === null) {
+      skip.push({ filename: def.filename, subsystem: null, score: null, reason: 'no subsystem score — file exists' });
+    } else if (score >= SKIP_THRESHOLD) {
+      skip.push({ filename: def.filename, subsystem: def.subsystem, score, reason: `score ${score}/100 — already excellent` });
+    } else {
+      improve.push(makeImproveItem(def, subsystemData!));
     }
+  }
 
-    if (data.score < 60) {
-      const canonical = data.files.filter((f) => CANONICAL_NAMES.has(f) && !isPlanFile(f));
-      const nonCanonical = data.files.filter((f) => !CANONICAL_NAMES.has(f) && !isPlanFile(f));
-      const planFiles = data.files.filter((f) => isPlanFile(f));
-
-      if (canonical.length > 0) {
-        improve.push(buildImproveItem(subsystem, { ...data, files: canonical }));
-      } else if (nonCanonical.length > 0) {
-        generate.push(makeGenerateItem(subsystem, [...nonCanonical, 'package.json']));
-      }
-
-      for (const file of [...nonCanonical, ...planFiles]) {
+  for (const subsystem of ['identity', 'verification', 'state', 'memory', 'constraints'] as const) {
+    const data = scored[subsystem];
+    const nonCanonical = data.files.filter((f) => !CANONICAL_NAMES.has(f));
+    const planFiles = data.files.filter((f) => isPlanFile(f));
+    for (const file of [...nonCanonical, ...planFiles]) {
+      if (!source_context.some((sc) => sc.path === file && sc.subsystem === subsystem)) {
         source_context.push({
           path: file,
           subsystem,
           score: data.score,
           reason: 'Useful context was found outside a canonical harness artifact.',
-          suggestion: `Use as source context only. Extract durable facts into ${ARTIFACT_BY_SUBSYSTEM[subsystem].filename}.`,
+          suggestion: `Use as source context only. Extract durable facts into the canonical ${subsystem} artifact.`,
         });
       }
     }
@@ -209,6 +290,7 @@ export function buildRemediationPlan(scored: ScoredResult, target: string): Reme
     overall: scored.overall,
     generate,
     improve,
+    skip,
     source_context,
     subsystemScores,
     subsystemSources,
@@ -245,7 +327,7 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
   } else {
     for (const item of plan.generate) {
       lines.push(`### ${item.filename}`);
-      lines.push(`- subsystem: ${item.subsystem}`);
+      lines.push(`- subsystem: ${item.subsystem ?? 'n/a'}`);
       lines.push(`- template: ${item.template}`);
       const srcFiles = item.use_as_sources?.length ? item.use_as_sources : item.source_signals;
       lines.push(`- source_files: ${srcFiles.join(', ')}`);
@@ -261,13 +343,24 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
   } else {
     for (const item of plan.improve) {
       lines.push(`### ${item.filename}`);
-      lines.push(`- subsystem: ${item.subsystem}`);
+      lines.push(`- subsystem: ${item.subsystem ?? 'n/a'}`);
       lines.push(`- section: ${item.section}`);
       lines.push(`- missing: ${item.missing}`);
       lines.push(`- fix: ${item.fix}`);
       const srcFiles = item.use_as_sources ?? [];
       if (srcFiles.length > 0) lines.push(`- source_files: ${srcFiles.join(', ')}`);
       lines.push('');
+    }
+  }
+  lines.push('');
+
+  lines.push('## SKIP');
+  if (plan.skip.length === 0) {
+    lines.push('(none)');
+  } else {
+    for (const item of plan.skip) {
+      const scoreStr = item.score !== null ? ` (${item.score}/100)` : '';
+      lines.push(`- ${item.filename}${scoreStr} — ${item.reason}`);
     }
   }
   lines.push('');

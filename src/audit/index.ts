@@ -33,7 +33,7 @@ export async function runAudit(target: string, opts: AuditOptions): Promise<void
     () => scoreRepo(files, mappings, provider),
   );
   const totalTokens = provider.getTotalTokens();
-  const remediation = buildRemediationPlan(scored, targetDir);
+  const remediation = await buildRemediationPlan(scored, targetDir);
   const planPath = await withSpinner(
     'Writing remediation plan...',
     spinnerEnabled,
