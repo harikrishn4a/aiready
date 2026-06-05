@@ -2,6 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import ora from 'ora';
 import type { LLMProvider } from '../utils/llm.js';
+
+const SEA_GREEN = '\x1b[38;2;46;139;87m';
+const RESET = '\x1b[0m';
+const SPINNER_FRAMES = ['·', '✻', '✽', '✶', '✳', '✢'].map((f) => `${SEA_GREEN}${f}${RESET}`);
 import type { ArtifactPlan } from './planner.js';
 import { generateArtifact, loadTemplate, type InitContext } from './generator.js';
 import { improveArtifact } from './improver.js';
@@ -76,7 +80,7 @@ export async function executeGenerate(
     return;
   }
 
-  const spinner = ora({ text: 'Generating...', indent: 6 }).start();
+  const spinner = ora({ text: 'Generating...', indent: 6, spinner: { interval: 120, frames: SPINNER_FRAMES } }).start();
   try {
     const rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
     spinner.text = 'Correcting headings...';
@@ -117,7 +121,7 @@ export async function executeImprove(
     return;
   }
 
-  const spinner = ora({ text: 'Improving...', indent: 6 }).start();
+  const spinner = ora({ text: 'Improving...', indent: 6, spinner: { interval: 120, frames: SPINNER_FRAMES } }).start();
   try {
     const currentContent = readFileSync(filePath, 'utf-8');
     let rawContent: string;
