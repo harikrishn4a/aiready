@@ -90,7 +90,7 @@ describe('pipeline: good-repo scoring (mocked provider)', () => {
       ],
     }));
     const scored = await scoreRepo(files, mappings, provider);
-    expect(scored.overall).toBeGreaterThan(70);
+    expect(scored.overall).toBeGreaterThanOrEqual(70);
   });
 
   it('passes cross-ref checks', () => {

@@ -1,14 +1,23 @@
+import { resolve } from 'path';
+import { existsSync } from 'fs';
 import type { LLMProvider } from '../utils/llm.js';
 import type { RepoFiles } from './loader.js';
 import type { FileMapping, Subsystem } from './mapper.js';
 import { crossRef } from './cross-ref.js';
 import type { CrossRefResult } from './cross-ref.js';
+import { loadTemplates, extractSectionHeadings, TEMPLATE_SUBSYSTEM_MAP } from './templates.js';
+import type { LoadedTemplates } from './templates.js';
 
 export interface SubsystemScore {
   score: number;
+  structuralScore: number;
+  contentScore: number;
+  presentSections: string[];
+  missingSections: string[];
+  isHarnessArtifact: boolean;
   gaps: string[];
   findings: Finding[];
-  files: string[];  // relative paths of files that contributed to this subsystem
+  files: string[];
 }
 
 export interface Finding {
@@ -26,92 +35,51 @@ export interface ScoredResult {
   crossRef: CrossRefResult;
 }
 
-const SCORER_SYSTEM = `You are scoring whether repository files are intentional AI agent harness artifacts.
-
-Core principle: a file must be intentionally written as a harness artifact to score well.
-A workflow doc, changelog, implementation log, or generic README that happens to contain useful information does NOT qualify as a strong harness artifact.
-Use the expected artifact structure from the AIReady examples: agents.md, constraints.md, architecture.md, progress.md, session-handoff.md, and structure.md.
-If a subsystem's content exists inside the wrong file or as a section within a broader file, score the actual content quality. Do not score it as 0 only because the filename is non-canonical. Instead, assign partial credit and warn that it should be structured into the expected artifact.
-
-Evaluate each subsystem independently:
-
-IDENTITY
-You are evaluating whether a file or section functions as an agent entry point for a software repository.
-A genuine agent entry point MUST contain ALL of:
-1. Explicit project description explaining what the project does and who it is for (minimum 40 words)
-2. Tech stack section listing languages, frameworks, and versions
-3. Verification commands an agent can run to confirm its work
-4. Repo structure or file map showing how the codebase is organised
-Score 0-100:
-- All 4 present and detailed: 85-100
-- 3 of 4 present: 60-80
-- 2 of 4 present: 30-55
-- 1 of 4 present: 10-25
-- Identity details present but mixed into a generic README or planning document: 20-60
-- Workflow doc, changelog, or implementation log: MAX score 20
-
-VERIFICATION
-You are evaluating whether a file or section documents how to verify work in a software repository for AI agents.
-A genuine verification document MUST contain:
-1. Specific runnable commands (npm test, pytest, make check, etc.)
-2. Commands that match what is actually in package.json or equivalent
-3. A clear indication of what "done" means for this project
-Score 0-100:
-- Specific commands present and complete: 70-100
-- Commands present but vague or incomplete: 40-65
-- Only mentions testing exists without commands: 10-35
-- Runnable commands present but buried in a general agent entry, README, or plan: 35-70
-- Workflow or process doc without runnable commands: MAX score 15
-
-STATE
-You are evaluating whether a file or section tracks project state for AI agents resuming work across sessions.
-A genuine state file MUST contain:
-1. Current build/test status (passing or failing)
-2. What is completed, in progress, and blocked
-3. A clear next step an agent can pick up immediately
-Score 0-100:
-- All 3 present and current: 75-100
-- 2 of 3 present: 45-70
-- Only a task list without status: 20-40
-- Current state details present but embedded in a planning or implementation log: 20-60
-- Implementation log or changelog: MAX score 20
-
-MEMORY
-You are evaluating whether a file or section helps AI agents navigate a codebase without exploring it manually.
-A genuine memory file MUST contain:
-1. Module map showing what each directory or component does
-2. Clear ownership or responsibility per module
-3. Key files an agent should know about
-4. Data flow or dependency relationships between modules
-Score 0-100:
-- All 4 present: 80-100
-- 3 of 4 present: 55-75
-- 2 of 4 present: 30-50
-- High-level description without module breakdown: 10-25
-- Architecture/navigation details present but embedded in a plan or general README: 25-60
-- Workflow or process doc: MAX score 20
-
-CONSTRAINTS
-You are evaluating whether a file or section documents hard limits for AI agents working in this repository.
-A genuine constraints artifact MUST contain:
-1. Explicit MUST or MUST NOT language
-2. Specific forbidden actions (not general advice)
-3. Domain-specific rules (auth, filesystem, network, etc.)
-Score 0-100:
-- MUST/MUST NOT language with specific rules: 70-100
-- MUST/MUST NOT language is present but mixed into a general agent entry file instead of a dedicated constraints structure: 40-70
-- Rules present but without MUST/MUST NOT language: 30-60
-- General conventions without hard limits: 10-25
-- No constraints content or no file mapped to constraints: 0
-If constraints are found inside AGENTS.md, CLAUDE.md, .cursorrules, or .windsurfrules, score the actual constraint content. Do not return 0 only because the constraints are not in CONSTRAINTS.md; instead warn that the constraints are present but not properly structured.
-
-Return ONLY valid JSON with no explanation:
-{"identity":{"score":85,"findings":[{"type":"pass","message":"project purpose and stack are explicit"}]},"verification":{"score":70,"findings":[{"type":"warn","message":"commands present but done criteria are incomplete"}]},"state":{"score":60,"findings":[]},"memory":{"score":90,"findings":[]},"constraints":{"score":0,"findings":[{"type":"fail","message":"no constraints file mapped"}]}}`;
-
 const SUBSYSTEMS: Subsystem[] = ['identity', 'verification', 'state', 'memory', 'constraints'];
+
+// Build a compact section list from a template for inclusion in system prompt
+function templateSectionSummary(subsystem: string, templates: LoadedTemplates): string {
+  const primaryFiles = TEMPLATE_SUBSYSTEM_MAP[subsystem]?.primary ?? [];
+  const parts: string[] = [];
+  for (const file of primaryFiles) {
+    const secs = templates.sections[file];
+    if (secs && secs.length > 0) {
+      parts.push(`${file}: ${secs.join(' | ')}`);
+    }
+  }
+  return parts.length > 0 ? parts.join('\n') : '(no sections defined)';
+}
+
+function buildScoringSystemPrompt(templates: LoadedTemplates): string {
+  const templateSummaries = SUBSYSTEMS.map((sub) =>
+    `${sub.toUpperCase()}:\n${templateSectionSummary(sub, templates)}`,
+  ).join('\n\n');
+
+  return `You are scoring AI agent harness artifacts against their canonical template standards.
+
+TEMPLATE REFERENCE — ideal section structure per subsystem:
+${templateSummaries}
+
+SCORING RULES:
+- A file scores well when it follows the template structure and fills sections with real, specific content.
+- A workflow doc, changelog, or implementation log scores MAX 20 even if well-written — these are not harness artifacts.
+- Partial credit when content is present in a non-canonical file: score the actual content quality, warn about location.
+- If constraints content exists inside AGENTS.md / CLAUDE.md, score the constraint content — do not return 0.
+- For each subsystem: is_harness_artifact=true only if the file is intentionally written as an agent harness file.
+
+Return ONLY valid JSON with this exact structure:
+{
+  "identity":     { "score": 0-100, "is_harness_artifact": true|false, "findings": [{"type":"pass"|"warn"|"fail","message":"..."}] },
+  "verification": { "score": 0-100, "is_harness_artifact": true|false, "findings": [] },
+  "state":        { "score": 0-100, "is_harness_artifact": true|false, "findings": [] },
+  "memory":       { "score": 0-100, "is_harness_artifact": true|false, "findings": [] },
+  "constraints":  { "score": 0-100, "is_harness_artifact": true|false, "findings": [] }
+}`;
+}
 
 interface LLMScoreEntry {
   score: number;
+  is_harness_artifact?: boolean;
   findings?: Finding[];
   gaps?: string[];
 }
@@ -134,28 +102,65 @@ function parseScorerResponse(text: string): LLMScoreResponse {
   }
 }
 
-function emptyScore(): SubsystemScore {
-  const message = 'No files mapped to this subsystem';
-  return { score: 0, gaps: [message], findings: [{ type: 'fail', message }], files: [] };
-}
-
 function normalizeFindings(entry: LLMScoreEntry): Finding[] {
   if (Array.isArray(entry.findings)) {
     return entry.findings
-      .filter((f) =>
-        (f.type === 'pass' || f.type === 'warn' || f.type === 'fail') &&
-        typeof f.message === 'string',
-      )
+      .filter((f) => (f.type === 'pass' || f.type === 'warn' || f.type === 'fail') && typeof f.message === 'string')
       .map((f) => ({ type: f.type, message: f.message }));
   }
-
   if (Array.isArray(entry.gaps)) {
     return entry.gaps
       .filter((g) => typeof g === 'string')
       .map((message) => ({ type: 'fail' as const, message }));
   }
-
   return [];
+}
+
+export function scoreStructural(
+  fileContent: string,
+  templateSections: string[],
+): { score: number; present: string[]; missing: string[] } {
+  if (templateSections.length === 0) {
+    return { score: 0, present: [], missing: [] };
+  }
+
+  const fileSections = extractSectionHeadings(fileContent);
+  const present: string[] = [];
+  const missing: string[] = [];
+
+  for (const section of templateSections) {
+    const sectionLower = section.toLowerCase();
+    const found = fileSections.some(
+      (s) => s.toLowerCase().includes(sectionLower) || sectionLower.includes(s.toLowerCase()),
+    );
+    if (found) present.push(section);
+    else missing.push(section);
+  }
+
+  return {
+    score: Math.round((present.length / templateSections.length) * 100),
+    present,
+    missing,
+  };
+}
+
+export function combineScores(structuralScore: number, contentScore: number): number {
+  return Math.round(structuralScore * 0.4 + contentScore * 0.6);
+}
+
+function emptyScore(templateSections: string[]): SubsystemScore {
+  const message = 'No file found serving this subsystem';
+  return {
+    score: 0,
+    structuralScore: 0,
+    contentScore: 0,
+    presentSections: [],
+    missingSections: templateSections,
+    isHarnessArtifact: false,
+    gaps: [message],
+    findings: [{ type: 'fail', message }],
+    files: [],
+  };
 }
 
 function buildSubsystemContent(
@@ -163,10 +168,7 @@ function buildSubsystemContent(
   mdFiles: RepoFiles['mdFiles'],
   mappings: FileMapping[],
 ): { files: string[]; content: string } {
-  const mappedPaths = mappings
-    .filter((m) => m.subsystems.includes(subsystem))
-    .map((m) => m.path);
-
+  const mappedPaths = mappings.filter((m) => m.subsystems.includes(subsystem)).map((m) => m.path);
   if (mappedPaths.length === 0) return { files: [], content: '' };
 
   const fileMap = new Map(mdFiles.map((f) => [f.path, f.fullContent]));
@@ -174,21 +176,53 @@ function buildSubsystemContent(
     const content = fileMap.get(p) ?? '';
     return `=== ${p} ===\n${content}`;
   });
-
   return { files: mappedPaths, content: sections.join('\n\n') };
+}
+
+function getTemplateSectionsForSubsystem(subsystem: string, templates: LoadedTemplates): string[] {
+  const primaryFiles = TEMPLATE_SUBSYSTEM_MAP[subsystem]?.primary ?? [];
+  const allSections: string[] = [];
+  for (const file of primaryFiles) {
+    const secs = templates.sections[file];
+    if (secs) allSections.push(...secs);
+  }
+  return [...new Set(allSections)];
+}
+
+function resolveExamplesDir(): string {
+  // In compiled dist: __dirname = dist/, so ../examples = project root examples
+  const fromDist = resolve(__dirname, '..', 'examples');
+  if (existsSync(fromDist)) return fromDist;
+  // In vitest (source files): __dirname = src/audit/, so ../../examples = project root examples
+  return resolve(__dirname, '..', '..', 'examples');
 }
 
 export async function scoreRepo(
   files: RepoFiles,
   mappings: FileMapping[],
   provider: LLMProvider,
+  examplesDir?: string,
 ): Promise<ScoredResult> {
-  // Build per-subsystem content for the scoring prompt
+  const templates = await loadTemplates(examplesDir ?? resolveExamplesDir());
+
+  // Build per-subsystem content
   const subsystemContents = SUBSYSTEMS.map((s) => ({
     subsystem: s,
     ...buildSubsystemContent(s, files.mdFiles, mappings),
   }));
 
+  // Compute structural scores deterministically (no LLM needed)
+  const structuralScores: Record<string, ReturnType<typeof scoreStructural>> = {};
+  for (const { subsystem, files: subsysFiles, content } of subsystemContents) {
+    const templateSections = getTemplateSectionsForSubsystem(subsystem, templates);
+    if (subsysFiles.length === 0 || !content) {
+      structuralScores[subsystem] = { score: 0, present: [], missing: templateSections };
+    } else {
+      structuralScores[subsystem] = scoreStructural(content, templateSections);
+    }
+  }
+
+  // One LLM call for content quality scoring (template-aware)
   const contentSections = subsystemContents
     .map(({ subsystem, content }) => {
       if (!content) return `### ${subsystem}\n(no files mapped)`;
@@ -197,7 +231,7 @@ export async function scoreRepo(
     .join('\n\n');
 
   const text = await provider.chat(
-    SCORER_SYSTEM,
+    buildScoringSystemPrompt(templates),
     `Score this repository's AI harness across all 5 subsystems:\n\n${contentSections}`,
     { fast: false },
   );
@@ -205,26 +239,54 @@ export async function scoreRepo(
   const llmScores = parseScorerResponse(text);
 
   function toSubsystemScore(key: Subsystem): SubsystemScore {
-    const entry = llmScores[key];
+    const templateSections = getTemplateSectionsForSubsystem(key, templates);
+    const structural = structuralScores[key] ?? { score: 0, present: [], missing: templateSections };
     const { files: subsysFiles } = subsystemContents.find((s) => s.subsystem === key) ?? { files: [] };
-    if (!entry) return emptyScore();
+
+    if (subsysFiles.length === 0) {
+      return emptyScore(templateSections);
+    }
+
+    const entry = llmScores[key];
+    if (!entry) {
+      return {
+        score: 0,
+        structuralScore: structural.score,
+        contentScore: 0,
+        presentSections: structural.present,
+        missingSections: structural.missing,
+        isHarnessArtifact: false,
+        gaps: ['LLM did not return a score for this subsystem'],
+        findings: [{ type: 'fail', message: 'LLM did not return a score for this subsystem' }],
+        files: subsysFiles,
+      };
+    }
+
     const findings = normalizeFindings(entry);
-    const gaps = findings
-      .filter((f) => f.type === 'warn' || f.type === 'fail')
-      .map((f) => f.message);
+    const rawContentScore = Math.min(100, Math.max(0, Math.round(entry.score)));
+    const isHarness = entry.is_harness_artifact !== false; // default true if not specified
+    const contentScore = isHarness ? rawContentScore : Math.min(rawContentScore, 20);
+    const finalScore = combineScores(structural.score, contentScore);
+    const gaps = findings.filter((f) => f.type === 'warn' || f.type === 'fail').map((f) => f.message);
+
     return {
-      score: Math.min(100, Math.max(0, Math.round(entry.score))),
+      score: finalScore,
+      structuralScore: structural.score,
+      contentScore,
+      presentSections: structural.present,
+      missingSections: structural.missing,
+      isHarnessArtifact: isHarness,
       gaps,
       findings,
       files: subsysFiles,
     };
   }
 
-  const identity = toSubsystemScore('identity');
+  const identity     = toSubsystemScore('identity');
   const verification = toSubsystemScore('verification');
-  const state = toSubsystemScore('state');
-  const memory = toSubsystemScore('memory');
-  const constraints = toSubsystemScore('constraints');
+  const state        = toSubsystemScore('state');
+  const memory       = toSubsystemScore('memory');
+  const constraints  = toSubsystemScore('constraints');
 
   const overall = Math.round(
     (identity.score + verification.score + state.score + memory.score + constraints.score) / 5,

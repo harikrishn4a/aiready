@@ -80,17 +80,21 @@ describe('scoreRepo — LLM scores are reflected', () => {
   it('uses LLM score for identity', async () => {
     const provider = makeProvider({
       ...allZeroScores(),
-      identity: { score: 85, findings: [{ type: 'warn', message: 'Need version' }] },
+      identity: { score: 85, is_harness_artifact: true, findings: [{ type: 'warn', message: 'Need version' }] },
     });
-    const result = await scoreRepo(makeFiles(), [], provider);
-    expect(result.identity.score).toBe(85);
+    const mdFiles = [{ path: 'AGENTS.md', name: 'AGENTS.md', preview: '', fullContent: '# Agents\n\nContent here.' }];
+    const mappings: FileMapping[] = [{ path: 'AGENTS.md', subsystems: ['identity'] }];
+    const result = await scoreRepo(makeFiles({ mdFiles }), mappings, provider);
+    expect(result.identity.contentScore).toBe(85);
     expect(result.identity.gaps).toContain('Need version');
   });
 
   it('clamps score to 0-100', async () => {
     const provider = makeProvider({ ...allZeroScores(), verification: { score: 150, findings: [] } });
-    const result = await scoreRepo(makeFiles(), [], provider);
-    expect(result.verification.score).toBe(100);
+    const mdFiles = [{ path: 'Makefile', name: 'Makefile', preview: '', fullContent: 'build:\n\techo ok' }];
+    const mappings: FileMapping[] = [{ path: 'Makefile', subsystems: ['verification'] }];
+    const result = await scoreRepo(makeFiles({ mdFiles }), mappings, provider);
+    expect(result.verification.contentScore).toBe(100);
   });
 
   it('overall is average of 5 subsystem scores', async () => {
@@ -102,7 +106,11 @@ describe('scoreRepo — LLM scores are reflected', () => {
       constraints: { score: 70, findings: [] },
     });
     const result = await scoreRepo(makeFiles(), [], provider);
-    expect(result.overall).toBe(70); // (80+60+40+100+70)/5
+    const expected = Math.round(
+      (result.identity.score + result.verification.score + result.state.score +
+       result.memory.score + result.constraints.score) / 5,
+    );
+    expect(result.overall).toBe(expected);
   });
 });
 
@@ -138,10 +146,10 @@ describe('scoreRepo — provider interaction', () => {
     const provider = makeProvider(allZeroScores());
     await scoreRepo(makeFiles(), [], provider);
     const systemPrompt = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0]?.[0] as string;
-    expect(systemPrompt).toContain('If a subsystem\'s content exists inside the wrong file');
-    expect(systemPrompt).toContain('assign partial credit and warn');
-    expect(systemPrompt).toContain('file or section documents hard limits');
-    expect(systemPrompt).toContain('Do not return 0 only because the constraints are not in CONSTRAINTS.md');
+    expect(systemPrompt).toContain('SCORING RULES');
+    expect(systemPrompt).toContain('constraints content exists inside AGENTS.md / CLAUDE.md');
+    expect(systemPrompt).toContain('do not return 0');
+    expect(systemPrompt).toContain('Partial credit when content is present in a non-canonical file');
   });
 
   it('returns 0 scores when provider returns invalid JSON', async () => {
