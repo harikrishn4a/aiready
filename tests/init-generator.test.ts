@@ -20,6 +20,7 @@ const BASE: ArtifactPlan = {
   currentScore: 12,
   reason: 'generate',
   alwaysGenerate: false,
+  generateOnly: false,
 };
 
 describe('generateArtifact', () => {
@@ -39,6 +40,25 @@ describe('generateArtifact', () => {
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1]).toContain('TEMPLATE START');
     expect(call[1]).toContain('MUST');
+  });
+
+  it('system prompt enforces exact heading rule — not paraphrase', async () => {
+    const provider = mockProvider('## What this is\nReal description\n\n## Stack\n- Python');
+    await generateArtifact(BASE, PARTIAL_REPO, provider);
+    const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
+    const systemPrompt: string = call[0];
+    expect(systemPrompt).toContain('EXACT section headings');
+    expect(systemPrompt).toContain('character for character');
+    expect(systemPrompt).toContain('## What this is');
+    expect(systemPrompt).toContain('## Current State');
+    expect(systemPrompt).toContain('## Stack');
+  });
+
+  it('passes fast: false for quality LLM output', async () => {
+    const provider = mockProvider('## What this is\nReal description\n\n## Stack\n- Python');
+    await generateArtifact(BASE, PARTIAL_REPO, provider);
+    const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[2]).toMatchObject({ fast: false });
   });
 });
 

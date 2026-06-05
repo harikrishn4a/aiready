@@ -12,18 +12,35 @@ export interface InitContext {
   sourceContext: SourceContextEntry[];
 }
 
-const SYSTEM_PROMPT = `You are consolidating information from a messy repository into a
-clean, canonical harness artifact for AI coding agents.
+const SYSTEM_PROMPT = `You are consolidating information from a repository
+into a clean canonical harness artifact for AI coding agents.
 
-CRITICAL RULES:
-- Follow the template structure EXACTLY — same sections, same headings
-- Replace every {{PLACEHOLDER}} with real content extracted from sources
+CRITICAL HEADING RULES — MUST FOLLOW EXACTLY:
+1. Use the EXACT section headings from the template — character for character
+2. Do not rename, reword, paraphrase, or improve any heading
+3. Do not add "##" to headings that are not in the template
+4. "## Current State" must appear as "## Current State" — not "## Current Build Status"
+5. "## Stack" must appear as "## Stack" — not "## Tech Stack" or "## Technology"
+6. "## What this is" must appear as "## What this is" — not "## Project Overview"
+7. If a heading contains {{PLACEHOLDER}} text, replace the placeholder
+   but keep the rest of the heading exactly as written
+
+CONTENT RULES:
+- Replace every {{PLACEHOLDER}} with real specific content from sources
 - Never leave placeholder text in output
 - Never add sections not in the template
 - Never remove sections from the template
-- If information for a section is not found in sources, write "Not yet documented" rather than leaving it blank or inventing content
-- Output the file content ONLY — no explanation, no markdown fences
-- Keep output under 300 lines unless template requires more`;
+- If information for a section is not available, write "Not yet documented"
+  rather than inventing content or leaving it blank
+- Use specific facts: real module names, real commands, real version numbers
+- Output the file content ONLY — no explanation, no markdown code fences
+
+LINE-LEVEL CONTENT:
+- For each line in the template that is a real instruction or example,
+  check if it is relevant to this project
+- If relevant: include it with project-specific adaptations
+- If not relevant: replace with the project-equivalent
+- Never copy template lines verbatim if they contain placeholder examples`;
 
 const BLANK_TEMPLATE_FILES = new Set([
   'TASK.md', 'features.md', 'feature_list.json', 'feature-list-schema.json',
