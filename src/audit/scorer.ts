@@ -1,6 +1,7 @@
-import { basename } from 'path';
+import { basename, join } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import { resolveExamplesDir } from '../utils/examples-dir.js';
+import { exists, readFile as readFsFile } from '../utils/fs.js';
 import type { RepoFiles } from './loader.js';
 import type { FileMapping, Subsystem } from './mapper.js';
 import { crossRef } from './cross-ref.js';
@@ -25,11 +26,21 @@ export interface SubsystemScore {
   gaps: string[];
   findings: Finding[];
   files: string[];
+  baselineStatus?: 'established' | 'partial' | 'missing';
 }
 
 export interface Finding {
   type: 'pass' | 'warn' | 'fail';
   message: string;
+}
+
+export interface BaselineCheck {
+  status: 'established' | 'partial' | 'missing';
+  runnableCommand: string | null;
+  commandExists: boolean;
+  documented: boolean;
+  crossRefsValid: boolean;
+  findings: Finding[];
 }
 
 export interface ScoredResult {
@@ -307,6 +318,96 @@ function getTemplateSectionsForSubsystem(subsystem: string, templates: LoadedTem
   return [...new Set(allSections)];
 }
 
+export function scoreFromBaseline(baseline: BaselineCheck): number {
+  if (baseline.status === 'established') return 90;
+  if (baseline.status === 'partial') {
+    return baseline.commandExists && baseline.documented ? 60 : 40;
+  }
+  return 10;
+}
+
+export async function checkVerificationBaseline(
+  targetDir: string,
+  agentsMdContent: string | null,
+  packageJsonScripts: Record<string, unknown> | null,
+): Promise<BaselineCheck> {
+  const findings: Finding[] = [];
+
+  const makefilePath = join(targetDir, 'Makefile');
+  const makefileExists = exists(makefilePath);
+  let makefileTargets: string[] = [];
+  if (makefileExists) {
+    const content = readFsFile(makefilePath);
+    if (content) {
+      makefileTargets = (content.match(/^[a-zA-Z][a-zA-Z0-9_-]*:/gm) ?? [])
+        .map((t) => t.replace(':', '').trim());
+    }
+  }
+
+  const verifyShExists = exists(join(targetDir, 'scripts/verify.sh'));
+
+  let runnableCommand: string | null = null;
+  if (makefileExists && makefileTargets.includes('check')) {
+    runnableCommand = 'make check';
+  } else if (makefileExists && makefileTargets.includes('verify')) {
+    runnableCommand = 'make verify';
+  } else if (makefileExists && makefileTargets.includes('test')) {
+    runnableCommand = 'make test';
+  } else if (verifyShExists) {
+    runnableCommand = './scripts/verify.sh';
+  } else if (packageJsonScripts && 'test' in packageJsonScripts) {
+    runnableCommand = 'npm test';
+  }
+
+  const commandExists = runnableCommand !== null;
+
+  const agentsLower = agentsMdContent?.toLowerCase() ?? '';
+  const documented = commandExists && (
+    agentsLower.includes('make check') ||
+    agentsLower.includes('make verify') ||
+    agentsLower.includes('make test') ||
+    agentsLower.includes('verify.sh') ||
+    agentsLower.includes('npm test') ||
+    /verification\s+commands/i.test(agentsLower)
+  );
+
+  const crossRefsValid = agentsMdContent !== null && (
+    agentsMdContent.includes('Makefile') ||
+    agentsMdContent.includes('verify.sh') ||
+    /\bmake\s+\w/i.test(agentsMdContent) ||
+    /verification\s+commands/i.test(agentsMdContent)
+  );
+
+  if (commandExists) {
+    findings.push({ type: 'pass', message: `Runnable verification command: ${runnableCommand}` });
+  } else {
+    findings.push({ type: 'fail', message: 'No runnable verification command (no Makefile with check/verify/test target, no scripts/verify.sh, no npm test)' });
+  }
+
+  if (documented) {
+    findings.push({ type: 'pass', message: 'Verification commands documented in agent entry file' });
+  } else {
+    findings.push({ type: commandExists ? 'warn' : 'fail', message: 'Verification commands not documented in AGENTS.md — agents cannot confirm their work' });
+  }
+
+  if (crossRefsValid) {
+    findings.push({ type: 'pass', message: 'Agent entry file cross-references verification artifacts' });
+  } else {
+    findings.push({ type: 'warn', message: 'Agent entry file does not reference Makefile or verify.sh' });
+  }
+
+  let status: BaselineCheck['status'];
+  if (commandExists && documented && crossRefsValid) {
+    status = 'established';
+  } else if (commandExists) {
+    status = 'partial';
+  } else {
+    status = 'missing';
+  }
+
+  return { status, runnableCommand, commandExists, documented, crossRefsValid, findings };
+}
+
 export async function scoreRepo(
   files: RepoFiles,
   mappings: FileMapping[],
@@ -354,13 +455,36 @@ export async function scoreRepo(
 
   const llmScores = parseScorerResponse(text);
 
+  const packageJsonScripts = (files.packageJson?.scripts ?? null) as Record<string, unknown> | null;
+  const baseline = await checkVerificationBaseline(files.targetDir, files.agentsMd, packageJsonScripts);
+
   function toSubsystemScore(key: Subsystem): SubsystemScore {
     const templateSections = getTemplateSectionsForSubsystem(key, templates);
     const structural = structuralScores[key] ?? { score: 0, present: [], missing: templateSections };
     const { files: subsysFiles } = subsystemContents.find((s) => s.subsystem === key) ?? { files: [] };
 
-    if (subsysFiles.length === 0) {
+    if (subsysFiles.length === 0 && key !== 'verification') {
       return emptyScore(templateSections);
+    }
+
+    if (key === 'verification') {
+      const contentScore = scoreFromBaseline(baseline);
+      const finalScore = combineScores(structural.score, contentScore);
+      const gaps = baseline.findings
+        .filter((f) => f.type === 'warn' || f.type === 'fail')
+        .map((f) => f.message);
+      return {
+        score: finalScore,
+        structuralScore: structural.score,
+        contentScore,
+        presentSections: structural.present,
+        missingSections: structural.missing,
+        isHarnessArtifact: baseline.commandExists,
+        gaps,
+        findings: baseline.findings,
+        files: subsysFiles,
+        baselineStatus: baseline.status,
+      };
     }
 
     const entry = llmScores[key];

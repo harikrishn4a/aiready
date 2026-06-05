@@ -1,4 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
+import { mkdirSync, writeFileSync, rmSync } from 'fs';
+import { join } from 'path';
+import { tmpdir } from 'os';
 import {
   scoreRepo,
   scoreMakefileStructure,
@@ -7,6 +10,8 @@ import {
   scoreArchitectureStructure,
   scoreStructural,
   combineScores,
+  checkVerificationBaseline,
+  scoreFromBaseline,
 } from '../src/audit/scorer';
 import type { LLMProvider } from '../src/utils/llm';
 import type { RepoFiles } from '../src/audit/loader';
@@ -97,12 +102,12 @@ describe('scoreRepo — LLM scores are reflected', () => {
     expect(result.identity.gaps).toContain('Need version');
   });
 
-  it('clamps score to 0-100', async () => {
-    const provider = makeProvider({ ...allZeroScores(), verification: { score: 150, findings: [] } });
-    const mdFiles = [{ path: 'Makefile', name: 'Makefile', preview: '', fullContent: 'build:\n\techo ok' }];
-    const mappings: FileMapping[] = [{ path: 'Makefile', subsystems: ['verification'] }];
+  it('clamps LLM score to 0-100 for non-verification subsystems', async () => {
+    const provider = makeProvider({ ...allZeroScores(), identity: { score: 150, is_harness_artifact: true, findings: [] } });
+    const mdFiles = [{ path: 'AGENTS.md', name: 'AGENTS.md', preview: '', fullContent: '# Agents\nContent.' }];
+    const mappings: FileMapping[] = [{ path: 'AGENTS.md', subsystems: ['identity'] }];
     const result = await scoreRepo(makeFiles({ mdFiles }), mappings, provider);
-    expect(result.verification.contentScore).toBe(100);
+    expect(result.identity.contentScore).toBe(100);
   });
 
   it('overall is average of 5 subsystem scores', async () => {
@@ -160,14 +165,16 @@ describe('scoreRepo — provider interaction', () => {
     expect(systemPrompt).toContain('Partial credit when content is present in a non-canonical file');
   });
 
-  it('returns 0 scores when provider returns invalid JSON', async () => {
+  it('returns 0 for non-verification subsystems when provider returns invalid JSON', async () => {
     const provider: LLMProvider = {
       chat: vi.fn().mockResolvedValue('sorry, cannot help'),
       getTotalTokens: () => 0,
     };
     const result = await scoreRepo(makeFiles(), [], provider);
     expect(result.identity.score).toBe(0);
-    expect(result.overall).toBe(0);
+    expect(result.state.score).toBe(0);
+    // verification uses baseline scoring, not LLM — gets a non-zero minimum from scoreFromBaseline
+    expect(result.verification.contentScore).toBeGreaterThanOrEqual(10);
   });
 });
 
@@ -319,5 +326,118 @@ describe('combineScores', () => {
     expect(combineScores(0, 100)).toBe(60);
     expect(combineScores(100, 0)).toBe(40);
     expect(combineScores(50, 50)).toBe(50);
+  });
+});
+
+describe('checkVerificationBaseline', () => {
+  let tmpDir: string;
+
+  afterEach(() => {
+    try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ }
+  });
+
+  function makeTmp(): string {
+    const dir = join(tmpdir(), `aiready-test-${Date.now()}`);
+    mkdirSync(dir, { recursive: true });
+    return dir;
+  }
+
+  it('status=established when Makefile has check, AGENTS.md documents it and cross-refs', async () => {
+    tmpDir = makeTmp();
+    writeFileSync(join(tmpDir, 'Makefile'), 'check:\n\tnpm test\n');
+    const agentsMd = '## Verification commands\nRun `make check` to verify. See Makefile for details.';
+    const result = await checkVerificationBaseline(tmpDir, agentsMd, null);
+    expect(result.status).toBe('established');
+    expect(result.runnableCommand).toBe('make check');
+    expect(result.commandExists).toBe(true);
+    expect(result.documented).toBe(true);
+    expect(result.crossRefsValid).toBe(true);
+  });
+
+  it('status=partial when Makefile has check but AGENTS.md does not document it', async () => {
+    tmpDir = makeTmp();
+    writeFileSync(join(tmpDir, 'Makefile'), 'check:\n\tnpm test\n');
+    const result = await checkVerificationBaseline(tmpDir, '# No mention of commands', null);
+    expect(result.status).toBe('partial');
+    expect(result.commandExists).toBe(true);
+    expect(result.documented).toBe(false);
+  });
+
+  it('status=missing when no Makefile, no verify.sh, no npm test script', async () => {
+    tmpDir = makeTmp();
+    const result = await checkVerificationBaseline(tmpDir, null, null);
+    expect(result.status).toBe('missing');
+    expect(result.commandExists).toBe(false);
+    expect(result.runnableCommand).toBeNull();
+  });
+
+  it('uses verify alias when Makefile has verify but not check', async () => {
+    tmpDir = makeTmp();
+    writeFileSync(join(tmpDir, 'Makefile'), 'setup:\n\techo setup\nverify:\n\tnpm test\n');
+    const result = await checkVerificationBaseline(tmpDir, null, null);
+    expect(result.runnableCommand).toBe('make verify');
+    expect(result.commandExists).toBe(true);
+  });
+
+  it('falls back to verify.sh when no Makefile with check/verify/test', async () => {
+    tmpDir = makeTmp();
+    mkdirSync(join(tmpDir, 'scripts'));
+    writeFileSync(join(tmpDir, 'scripts/verify.sh'), '#!/bin/bash\nnpm test\n');
+    const result = await checkVerificationBaseline(tmpDir, null, null);
+    expect(result.runnableCommand).toBe('./scripts/verify.sh');
+    expect(result.commandExists).toBe(true);
+  });
+
+  it('falls back to npm test when packageJsonScripts has test', async () => {
+    tmpDir = makeTmp();
+    const result = await checkVerificationBaseline(tmpDir, null, { test: 'vitest run' });
+    expect(result.runnableCommand).toBe('npm test');
+    expect(result.commandExists).toBe(true);
+  });
+
+  it('includes a pass finding for runnable command', async () => {
+    tmpDir = makeTmp();
+    writeFileSync(join(tmpDir, 'Makefile'), 'check:\n\tnpm test\n');
+    const result = await checkVerificationBaseline(tmpDir, null, null);
+    const passFinding = result.findings.find((f) => f.type === 'pass' && f.message.includes('make check'));
+    expect(passFinding).toBeDefined();
+  });
+
+  it('includes a fail finding when no command exists', async () => {
+    tmpDir = makeTmp();
+    const result = await checkVerificationBaseline(tmpDir, null, null);
+    const failFinding = result.findings.find((f) => f.type === 'fail');
+    expect(failFinding).toBeDefined();
+    expect(failFinding?.message).toContain('No runnable verification command');
+  });
+});
+
+describe('scoreFromBaseline', () => {
+  it('returns 90 for established', () => {
+    expect(scoreFromBaseline({
+      status: 'established', runnableCommand: 'make check',
+      commandExists: true, documented: true, crossRefsValid: true, findings: [],
+    })).toBe(90);
+  });
+
+  it('returns 60 for partial with commandExists and documented', () => {
+    expect(scoreFromBaseline({
+      status: 'partial', runnableCommand: 'make check',
+      commandExists: true, documented: true, crossRefsValid: false, findings: [],
+    })).toBe(60);
+  });
+
+  it('returns 40 for partial with commandExists only', () => {
+    expect(scoreFromBaseline({
+      status: 'partial', runnableCommand: 'make check',
+      commandExists: true, documented: false, crossRefsValid: false, findings: [],
+    })).toBe(40);
+  });
+
+  it('returns 10 for missing', () => {
+    expect(scoreFromBaseline({
+      status: 'missing', runnableCommand: null,
+      commandExists: false, documented: false, crossRefsValid: false, findings: [],
+    })).toBe(10);
   });
 });

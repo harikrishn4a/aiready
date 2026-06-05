@@ -28,6 +28,10 @@ function subsystemLines(name: string, sub: SubsystemScore): string[] {
     `  Files: ${abbreviateFiles(sub.files)}`,
   ];
 
+  if (name === 'verification' && sub.baselineStatus) {
+    lines.push(`  Baseline: ${sub.baselineStatus}`);
+  }
+
   const present = sub.presentSections?.length ?? 0;
   const missing = sub.missingSections?.length ?? 0;
   if (present + missing > 0) {
