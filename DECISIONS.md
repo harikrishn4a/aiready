@@ -172,3 +172,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Keep deterministic fallback only for constraints — that leaves the same false-missing bug for verification commands, progress notes, architecture notes, and identity content. Depend only on preview-based LLM mapping — later sections can be missed.
 - **Constraints introduced**: Signal detection should stay conservative and should not make generic docs score highly. Quality and structure remain the scorer's job.
 - **Revisit when**: The mapper supports section-level extraction with source spans.
+
+---
+
+### 2026-06-05: Audit plan source files must be useful and deduped
+
+- **Decision**: `.aiready/plan.md` now deduplicates SOURCE CONTEXT by file path, combines mapped subsystems on one entry, and selects `source_files` for GENERATE/IMPROVE from non-empty candidate files. Empty canonical stubs are not used as their own source context.
+- **Reason**: Stage 2 init needs useful source material, not empty target files. When a repo has empty canonical artifacts plus meaningful non-canonical context, the audit plan should point init at the meaningful files.
+- **Rejected alternatives**: Keep every `(path, subsystem)` as a separate SOURCE CONTEXT entry — readable for machines but noisy for humans and redundant for init. Always include canonical target files as sources — misleading when the target file is an empty stub.
+- **Constraints introduced**: `remediation.ts` may read candidate files only to determine whether they contain useful content; it still must not generate or modify harness artifacts beyond writing `.aiready/plan.md`.
+- **Revisit when**: Init executor switches empty improve targets to generation mode.

@@ -112,6 +112,66 @@ describe('buildRemediationPlan', () => {
     expect(plan.source_context.some((i) => i.path === 'plan.md')).toBe(true);
   });
 
+  it('deduplicates source context by path and combines subsystems', async () => {
+    const plan = await buildRemediationPlan(
+      scored({
+        identity: sub(20, ['plan.md'], ['identity context is not canonical']),
+        state: sub(20, ['plan.md'], ['state context is not canonical']),
+        memory: sub(20, ['plan.md'], ['memory context is not canonical']),
+        constraints: sub(20, ['plan.md'], ['constraints context is not canonical']),
+      }),
+      '/repo',
+    );
+    const planEntries = plan.source_context.filter((item) => item.path === 'plan.md');
+    expect(planEntries).toHaveLength(1);
+    expect(planEntries[0]?.subsystems).toEqual(['identity', 'state', 'memory', 'constraints']);
+  });
+
+  it('prefers non-empty source files and excludes empty canonical target as its own source', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aiready-test-'));
+    try {
+      writeFileSync(join(dir, 'CONSTRAINTS.md'), '');
+      writeFileSync(join(dir, 'CLAUDE.md'), '## Key constraints\nMUST NOT modify the existing pipeline.');
+      writeFileSync(join(dir, 'plan.md'), '## Plan\nConstraint notes live here.');
+      writeFileSync(join(dir, 'AGENTS.md'), '');
+      const plan = await buildRemediationPlan(
+        scored({
+          constraints: sub(35, ['CONSTRAINTS.md', 'CLAUDE.md', 'plan.md'], ['constraints are embedded elsewhere']),
+        }),
+        dir,
+      );
+      const item = plan.improve.find((i) => i.filename === 'CONSTRAINTS.md');
+      expect(item?.use_as_sources).toContain('CLAUDE.md');
+      expect(item?.use_as_sources).toContain('plan.md');
+      expect(item?.use_as_sources).not.toContain('CONSTRAINTS.md');
+      expect(item?.use_as_sources).not.toContain('AGENTS.md');
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('keeps PROGRESS.md and SESSION-HANDOFF.md missing guidance separate', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'aiready-test-'));
+    try {
+      writeFileSync(join(dir, 'PROGRESS.md'), '# Progress');
+      writeFileSync(join(dir, 'SESSION-HANDOFF.md'), '');
+      const plan = await buildRemediationPlan(
+        scored({
+          state: sub(35, ['PROGRESS.md', 'SESSION-HANDOFF.md'], ['SESSION-HANDOFF.md is empty']),
+        }),
+        dir,
+      );
+      const progress = plan.improve.find((i) => i.filename === 'PROGRESS.md');
+      const handoff = plan.improve.find((i) => i.filename === 'SESSION-HANDOFF.md');
+      expect(progress?.missing).not.toContain('SESSION-HANDOFF.md');
+      expect(progress?.fix).toContain("PROGRESS.md's current state section");
+      expect(handoff?.missing).toContain('SESSION-HANDOFF.md is empty');
+      expect(handoff?.fix).toContain("SESSION-HANDOFF.md's session handoff");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it('adds source context for weak non-canonical files', async () => {
     const plan = await buildRemediationPlan(
       scored({ state: sub(35, ['FEATURE_PLAN.md'], ['no current status']) }),
@@ -221,6 +281,20 @@ describe('renderRemediationMarkdown', () => {
     const md = renderRemediationMarkdown(plan);
     expect(md).toContain('## SOURCE CONTEXT');
     expect(md).toContain('### FEATURE_PLAN.md');
+    expect(md).toContain('- subsystems: state');
+  });
+
+  it('renders a single SOURCE CONTEXT block for files mapped to multiple subsystems', async () => {
+    const plan = await buildRemediationPlan(
+      scored({
+        identity: sub(20, ['plan.md'], ['identity missing']),
+        state: sub(20, ['plan.md'], ['state missing']),
+      }),
+      '/repo',
+    );
+    const md = renderRemediationMarkdown(plan);
+    expect((md.match(/### plan\.md/g) ?? [])).toHaveLength(1);
+    expect(md).toContain('- subsystems: identity, state');
   });
 
   it('writes (none) when improve and skip sections are empty', async () => {

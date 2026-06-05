@@ -111,6 +111,7 @@ cross-ref.ts     Validates commands from AGENTS.md/identity-mapped files exist i
                  Checks PROGRESS.md freshness (within 7 days)
     ↓
 remediation.ts   Builds typed contract: generate / improve / source_context
+                 Dedupes source context and filters source_files to non-empty files
                  Writes .aiready/plan.md (markdown, human-readable)
     ↓
 reporter.ts      Prints multi-line subsystem scores to terminal
@@ -230,7 +231,8 @@ Shows a diff before writing. User confirms before any file is touched.
 
 ### audit/remediation.ts
 - MUST only build the remediation contract and write `.aiready/plan.md`
-- MUST NOT read source files directly (works from scorer/cross-ref output)
+- MAY read candidate source files to decide whether they contain useful content
+- MUST NOT use empty canonical stubs as their own source context
 
 ### utils/llm.ts
 - ONLY file that may import `@anthropic-ai/sdk` or `openai`

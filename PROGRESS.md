@@ -1,12 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 80.97 KB (full pipeline + Stage 2 bundled)
-- Tests: 224/224 passing (17 test files)
+- Build: passing — dist/cli.js 82.71 KB (full pipeline + Stage 2 bundled)
+- Tests: 228/228 passing (17 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **feat-015 complete**
+- Active feature: none — **feat-016 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -26,7 +26,7 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-015 complete
+- nothing — feat-016 complete
 
 ## Blocked
 - nothing
@@ -67,6 +67,7 @@
 - [x] **feat-013** — Fix init pipeline: new `## GENERATE`/`## IMPROVE`/`## SOURCE CONTEXT` plan.md format; async parser; `source_files` field replaces `source_signals`; non-canonical files → GENERATE canonical artifact; `plan.md` excluded from generate/improve targets; `{ fast: false }` for quality LLM output
 - [x] **feat-014** — Stage 2 init rebuild: planner.ts generates plans for all 13 canonical artifacts (AGENTS.md, CONSTRAINTS.md, ARCHITECTURE.md, DECISIONS.md, PROGRESS.md, SESSION-HANDOFF.md, TASK.md, features.md, feature_list.json, QUALITY.md, Makefile, scripts/init.sh, scripts/verify.sh); skip threshold 80; alwaysGenerate for blank templates; consolidator.ts merges CLAUDE.md/.cursorrules etc. into AGENTS.md and writes shims; per-subsystem score delta; --yes flag; `## SUBSYSTEM SCORES` + `## SUBSYSTEM SOURCES` in plan.md
 - [x] **feat-015** — Template-based scoring: templates.ts (TEMPLATE_SUBSYSTEM_MAP, loadTemplates(), extractSectionHeadings()); scorer redesign with structural (40%) + content (60%) two-dimensional scoring; scoreStructural() exported; template section summaries in LLM system prompt; non-harness artifacts capped at 20; remediation redesign: async buildRemediationPlan(), 13-artifact canonical list, file-existence-based SKIP/IMPROVE/GENERATE, `## SKIP` section in plan.md; reporter shows template section coverage (N/M + missing names)
+- [x] **feat-016** — Audit plan source cleanup: SOURCE CONTEXT dedupes by path with combined subsystems; IMPROVE source_files prefer non-empty source context over empty canonical stubs; artifact-specific fixes prevent PROGRESS.md and SESSION-HANDOFF.md guidance from being conflated
 
 ## Backlog — Stage 3+
 - Stage 3: analyze command (semantic gap analysis)

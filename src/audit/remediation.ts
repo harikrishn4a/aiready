@@ -1,5 +1,5 @@
 import { dirname, join } from 'path';
-import { mkdirSync, writeFileSync, existsSync } from 'fs';
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
 import type { ScoredResult, SubsystemScore } from './scorer.js';
 import type { Subsystem } from './mapper.js';
 
@@ -36,6 +36,7 @@ export interface ManualReviewItem {
   reason: string;
   suggestion: string;
   subsystem: Subsystem;
+  subsystems?: Subsystem[];
   score: number;
 }
 
@@ -56,6 +57,16 @@ const SKIP_THRESHOLD = 80;
 
 function isPlanFile(file: string): boolean {
   return file === 'plan.md' || file === '.aiready/plan.md' || file.endsWith('/.aiready/plan.md');
+}
+
+function hasUsefulContent(target: string, file: string): boolean {
+  const filePath = join(target, file);
+  if (!existsSync(filePath)) return false;
+  try {
+    return readFileSync(filePath, 'utf8').trim().length > 0;
+  } catch {
+    return false;
+  }
 }
 
 interface CanonicalArtifactDef {
@@ -190,11 +201,41 @@ const CANONICAL_ARTIFACTS: CanonicalArtifactDef[] = [
 
 const CANONICAL_NAMES = new Set(CANONICAL_ARTIFACTS.map((a) => a.filename));
 
-function makeGenerateItem(def: CanonicalArtifactDef, subsystemData: SubsystemScore | null): RemediationItem {
+function usefulSourcesForArtifact(
+  target: string,
+  def: CanonicalArtifactDef,
+  subsystemData: SubsystemScore | null,
+): string[] {
   const subsystemFiles = subsystemData
-    ? subsystemData.files.filter((f) => !isPlanFile(f) && f !== def.filename)
+    ? subsystemData.files.filter((f) => f !== def.filename && hasUsefulContent(target, f))
     : [];
-  const sourceFiles = [...new Set([...subsystemFiles, ...def.defaultSources])];
+  const defaults = def.defaultSources.filter((f) => f !== def.filename && hasUsefulContent(target, f));
+  return [...new Set([...subsystemFiles, ...defaults])];
+}
+
+function mentionsOtherCanonicalArtifact(gap: string, def: CanonicalArtifactDef): boolean {
+  const lower = gap.toLowerCase();
+  return CANONICAL_ARTIFACTS
+    .filter((artifact) => artifact.filename !== def.filename)
+    .some((artifact) => lower.includes(artifact.filename.toLowerCase()));
+}
+
+function pickMissingMessage(def: CanonicalArtifactDef, data: SubsystemScore): string {
+  return data.gaps.find((gap) => gap.toLowerCase().includes(def.filename.toLowerCase()))
+    ?? data.gaps.find((gap) =>
+      gap.toLowerCase().includes(def.sectionName.toLowerCase()) &&
+      !mentionsOtherCanonicalArtifact(gap, def)
+    )
+    ?? data.gaps.find((gap) => !mentionsOtherCanonicalArtifact(gap, def))
+    ?? `${def.filename} is missing required structure: ${def.required}`;
+}
+
+function makeGenerateItem(
+  target: string,
+  def: CanonicalArtifactDef,
+  subsystemData: SubsystemScore | null,
+): RemediationItem {
+  const sourceFiles = usefulSourcesForArtifact(target, def, subsystemData);
   return {
     filename: def.filename,
     subsystem: def.subsystem,
@@ -211,8 +252,8 @@ function makeGenerateItem(def: CanonicalArtifactDef, subsystemData: SubsystemSco
   };
 }
 
-function makeImproveItem(def: CanonicalArtifactDef, data: SubsystemScore): ImproveItem {
-  const missing = data.gaps[0] ?? 'score below threshold';
+function makeImproveItem(target: string, def: CanonicalArtifactDef, data: SubsystemScore): ImproveItem {
+  const missing = pickMissingMessage(def, data);
   return {
     filename: def.filename,
     subsystem: def.subsystem,
@@ -223,7 +264,7 @@ function makeImproveItem(def: CanonicalArtifactDef, data: SubsystemScore): Impro
     score: data.score,
     findings: data.findings.map((f) => `${f.type}: ${f.message}`),
     why: `Existing ${def.sectionName} scored ${data.score}/100.`,
-    use_as_sources: [...new Set(data.files.filter((f) => !isPlanFile(f)))],
+    use_as_sources: usefulSourcesForArtifact(target, def, data),
     write_policy: [
       'preserve existing useful content',
       'do not overwrite without --force',
@@ -231,7 +272,7 @@ function makeImproveItem(def: CanonicalArtifactDef, data: SubsystemScore): Impro
     ],
     section: def.sectionName,
     missing,
-    fix: `Update ${def.sectionName} using ${def.template}; keep the artifact under ${MAX_LINES} lines.`,
+    fix: `Update ${def.filename}'s ${def.sectionName} using ${def.template}; keep this artifact under ${MAX_LINES} lines.`,
     template_section: def.templateSection,
   };
 }
@@ -240,7 +281,7 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
   const generate: RemediationItem[] = [];
   const improve: ImproveItem[] = [];
   const skip: SkipItem[] = [];
-  const source_context: ManualReviewItem[] = [];
+  const sourceContextByPath = new Map<string, ManualReviewItem>();
   const subsystemScores: Record<string, number> = {};
   const subsystemSources: Record<string, string[]> = {};
 
@@ -257,13 +298,13 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
     const score = subsystemData?.score ?? null;
 
     if (!fileExists) {
-      generate.push(makeGenerateItem(def, subsystemData));
+      generate.push(makeGenerateItem(target, def, subsystemData));
     } else if (score === null) {
       skip.push({ filename: def.filename, subsystem: null, score: null, reason: 'no subsystem score — file exists' });
     } else if (score >= SKIP_THRESHOLD) {
       skip.push({ filename: def.filename, subsystem: def.subsystem, score, reason: `score ${score}/100 — already excellent` });
     } else {
-      improve.push(makeImproveItem(def, subsystemData!));
+      improve.push(makeImproveItem(target, def, subsystemData!));
     }
   }
 
@@ -272,10 +313,19 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
     const nonCanonical = data.files.filter((f) => !CANONICAL_NAMES.has(f));
     const planFiles = data.files.filter((f) => isPlanFile(f));
     for (const file of [...nonCanonical, ...planFiles]) {
-      if (!source_context.some((sc) => sc.path === file && sc.subsystem === subsystem)) {
-        source_context.push({
+      const existing = sourceContextByPath.get(file);
+      if (existing) {
+        const subsystems = existing.subsystems ?? [existing.subsystem];
+        if (!subsystems.includes(subsystem)) {
+          existing.subsystems = [...subsystems, subsystem];
+          existing.suggestion = `Use as source context only. Extract durable facts into the canonical ${existing.subsystems.join(', ')} artifacts.`;
+          existing.score = Math.min(existing.score, data.score);
+        }
+      } else {
+        sourceContextByPath.set(file, {
           path: file,
           subsystem,
+          subsystems: [subsystem],
           score: data.score,
           reason: 'Useful context was found outside a canonical harness artifact.',
           suggestion: `Use as source context only. Extract durable facts into the canonical ${subsystem} artifact.`,
@@ -291,7 +341,7 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
     generate,
     improve,
     skip,
-    source_context,
+    source_context: [...sourceContextByPath.values()],
     subsystemScores,
     subsystemSources,
   };
@@ -371,7 +421,8 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
   } else {
     for (const item of plan.source_context) {
       lines.push(`### ${item.path}`);
-      lines.push(`- subsystem: ${item.subsystem}`);
+      const subsystems = item.subsystems ?? [item.subsystem];
+      lines.push(`- subsystems: ${subsystems.join(', ')}`);
       lines.push(`- reason: ${item.reason}`);
       lines.push('');
     }

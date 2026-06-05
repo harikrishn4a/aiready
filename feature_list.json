@@ -388,6 +388,29 @@
       "last_updated": "2026-06-05"
     },
     {
+      "id": "feat-016",
+      "priority": 16,
+      "area": "audit",
+      "title": "Audit plan source cleanup",
+      "user_visible_behavior": "Audit plan SOURCE CONTEXT entries are deduplicated by file path, IMPROVE source_files prefer non-empty context files over empty canonical stubs, and state artifact fixes are specific to PROGRESS.md vs SESSION-HANDOFF.md",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 82.71 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 228/228 (17 test files; remediation 23 tests)"
+      ],
+      "agent_notes": "remediation.ts now checks candidate source files for non-empty content before including them in source_files. Empty canonical targets are not used as their own source. SOURCE CONTEXT is grouped by path with a combined subsystems list, so plan.md appears once even if mapped to multiple subsystems. makeImproveItem() chooses artifact-specific missing/fix text and avoids reusing SESSION-HANDOFF.md gaps for PROGRESS.md.",
+      "last_updated": "2026-06-05"
+    },
+    {
       "id": "feat-014",
       "priority": 14,
       "area": "init",
