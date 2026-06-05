@@ -1,43 +1,39 @@
-# TASK.md — feat-014: Stage 2 init — full canonical structure generation
+# TASK.md — feat-015: Template-based scoring and complete plan.md
 
 ## Feature ID
-feat-014
+feat-015
 
 ## Scope — what will change
-- NEW `src/init/planner.ts` — replaces parser.ts; builds plan for ALL 13 canonical artifacts
-- UPDATED `src/init/generator.ts` — strict template prompt, tech stack detection, blank template copy
-- UPDATED `src/init/improver.ts` — accepts ArtifactPlan instead of ImproveItem
-- UPDATED `src/init/executor.ts` — accepts ArtifactPlan for both generate and improve
-- UPDATED `src/init/scorer.ts` — new getAuditScoreDetailed() returning per-subsystem scores
-- UPDATED `src/init/index.ts` — planner, plan preview, confirmation prompt, per-subsystem delta
-- NEW `src/init/consolidator.ts` — merge CLAUDE.md/.cursorrules etc. into AGENTS.md, write shims
-- UPDATED `src/audit/remediation.ts` — write SUBSYSTEM SCORES + SUBSYSTEM SOURCES to plan.md
-- UPDATED `src/cli.ts` — add --yes flag to init command
+- NEW `src/audit/templates.ts` — template-subsystem mapping, loadTemplates(), extractSectionHeadings()
+- UPDATED `src/audit/scorer.ts` — structural score (deterministic section coverage) + template-aware content scoring; new SubsystemScore fields; scoreStructural() exported
+- UPDATED `src/audit/remediation.ts` — async buildRemediationPlan(); canonical-file-based SKIP/IMPROVE/GENERATE decisions; all 13 artifacts in plan.md; ## SKIP section
+- UPDATED `src/audit/reporter.ts` — terminal output shows template section coverage per subsystem
+- UPDATED `src/audit/index.ts` — await buildRemediationPlan()
 
-## Canonical artifact set (13 files)
-AGENTS.md, CONSTRAINTS.md, ARCHITECTURE.md, DECISIONS.md, PROGRESS.md, SESSION-HANDOFF.md,
-TASK.md, features.md, feature_list.json, QUALITY.md, Makefile, scripts/init.sh, scripts/verify.sh
+## Problems being fixed
+1. Scoring is template-blind: LLM scores files without knowing the ideal structure
+2. One-dimensional scoring: missing structural completeness dimension
+3. Wrong SKIP/IMPROVE/GENERATE decisions: based on subsystem score, not canonical file existence
 
-## Decision logic per artifact
-- Skip threshold: score >= 80 AND file exists → skip
-- Improve: score < 80 AND file exists → improve
-- Generate: file does not exist → generate
-- alwaysGenerate=true: never skip, always generate (blank template copy, no LLM)
+## Design decisions
+- Final score = structural × 0.4 + content × 0.6
+- Structural score: deterministic, counts ## heading matches vs template
+- Content score: single LLM call, system prompt includes template section list per subsystem
+- is_harness_artifact: false → content score capped at 20
+- SKIP threshold: 80 (structural + content)
+- buildRemediationPlan is now async (needs to read canonical files from disk)
+- All 13 canonical artifacts always appear in plan.md (generate/improve/skip)
+- plan.md/.aiready/* files never as GENERATE/IMPROVE targets
 
 ## Modules (in order)
-1. Create fixture files and fixture repos
-2. Update remediation.ts — add SUBSYSTEM SCORES + SUBSYSTEM SOURCES sections
-3. Create planner.ts + tests
-4. Update generator.ts — strict prompt, tech stack detection, blank template copy
-5. Update improver.ts + executor.ts — ArtifactPlan type throughout
-6. Create consolidator.ts + tests
-7. Update scorer.ts — getAuditScoreDetailed()
-8. Update index.ts — full pipeline: planner, preview, confirm, execute, consolidate, score delta
-9. Update cli.ts — --yes flag
+1. src/audit/templates.ts + tests
+2. src/audit/scorer.ts redesign + tests update
+3. src/audit/remediation.ts async + canonical decisions + tests update
+4. src/audit/reporter.ts template coverage + tests update
+5. src/audit/index.ts await fix
 
 ## Completion gate
 - npm run build — zero errors
 - npm run typecheck — zero errors
 - npm run lint — clean
-- npm test — all pass including new planner + consolidator tests
-- node dist/cli.js init --target ./examples/bare-repo --dry-run — shows 13 artifacts
+- npm test — all pass including new templates tests
