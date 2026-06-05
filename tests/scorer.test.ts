@@ -14,6 +14,10 @@ function makeProvider(response: object): LLMProvider {
 function makeFiles(overrides: Partial<RepoFiles> = {}): RepoFiles {
   return {
     mdFiles: [],
+    usedGraphify: false,
+    graphifyPath: null,
+    guaranteedFiles: [],
+    conceptMatchedFiles: [],
     agentsMd: null,
     architectureMd: null,
     constraintsMd: null,
@@ -31,11 +35,11 @@ function makeFiles(overrides: Partial<RepoFiles> = {}): RepoFiles {
 
 function allZeroScores() {
   return {
-    identity: { score: 0, gaps: ['No files'] },
-    verification: { score: 0, gaps: [] },
-    state: { score: 0, gaps: [] },
-    memory: { score: 0, gaps: [] },
-    constraints: { score: 0, gaps: [] },
+    identity: { score: 0, findings: [{ type: 'fail', message: 'No files' }] },
+    verification: { score: 0, findings: [] },
+    state: { score: 0, findings: [] },
+    memory: { score: 0, findings: [] },
+    constraints: { score: 0, findings: [] },
   };
 }
 
@@ -76,7 +80,7 @@ describe('scoreRepo — LLM scores are reflected', () => {
   it('uses LLM score for identity', async () => {
     const provider = makeProvider({
       ...allZeroScores(),
-      identity: { score: 85, gaps: ['Need version'] },
+      identity: { score: 85, findings: [{ type: 'warn', message: 'Need version' }] },
     });
     const result = await scoreRepo(makeFiles(), [], provider);
     expect(result.identity.score).toBe(85);
@@ -84,18 +88,18 @@ describe('scoreRepo — LLM scores are reflected', () => {
   });
 
   it('clamps score to 0-100', async () => {
-    const provider = makeProvider({ ...allZeroScores(), verification: { score: 150, gaps: [] } });
+    const provider = makeProvider({ ...allZeroScores(), verification: { score: 150, findings: [] } });
     const result = await scoreRepo(makeFiles(), [], provider);
     expect(result.verification.score).toBe(100);
   });
 
   it('overall is average of 5 subsystem scores', async () => {
     const provider = makeProvider({
-      identity: { score: 80, gaps: [] },
-      verification: { score: 60, gaps: [] },
-      state: { score: 40, gaps: [] },
-      memory: { score: 100, gaps: [] },
-      constraints: { score: 70, gaps: [] },
+      identity: { score: 80, findings: [] },
+      verification: { score: 60, findings: [] },
+      state: { score: 40, findings: [] },
+      memory: { score: 100, findings: [] },
+      constraints: { score: 70, findings: [] },
     });
     const result = await scoreRepo(makeFiles(), [], provider);
     expect(result.overall).toBe(70); // (80+60+40+100+70)/5
@@ -104,7 +108,7 @@ describe('scoreRepo — LLM scores are reflected', () => {
 
 describe('scoreRepo — file attribution', () => {
   it('includes mapped file paths in subsystem.files', async () => {
-    const provider = makeProvider({ ...allZeroScores(), identity: { score: 80, gaps: [] } });
+    const provider = makeProvider({ ...allZeroScores(), identity: { score: 80, findings: [] } });
     const mdFiles = [
       { path: 'AGENTS.md', name: 'AGENTS.md', preview: '# Agents', fullContent: '# Agents\nContent' },
     ];

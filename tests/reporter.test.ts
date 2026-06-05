@@ -6,6 +6,7 @@ function makeScored(overrides: Partial<ScoredResult> = {}): ScoredResult {
   const sub = (score: number, files: string[] = []) => ({
     score,
     gaps: score < 100 ? [`gap at ${score}`] : [],
+    findings: score < 100 ? [{ type: 'fail' as const, message: `gap at ${score}` }] : [],
     files,
   });
   return {
@@ -160,6 +161,24 @@ describe('report — JSON output', () => {
     const parsed = JSON.parse(output) as { token_usage: number; overall: number };
     expect(parsed.token_usage).toBe(8123);
     expect(parsed.overall).toBe(61);
+  });
+
+  it('JSON includes remediation when provided', () => {
+    report(makeScored(), {
+      json: true,
+      remediation: {
+        generated_at: '2026-06-05T00:00:00.000Z',
+        target: '/repo',
+        overall: 60,
+        generate: [],
+        improve: [],
+        review_manually: [],
+      },
+      planPath: '/repo/.aiready/plan.md',
+    });
+    const parsed = JSON.parse(output) as { remediation: unknown; plan_path: string };
+    expect(parsed.remediation).toBeDefined();
+    expect(parsed.plan_path).toBe('/repo/.aiready/plan.md');
   });
 });
 

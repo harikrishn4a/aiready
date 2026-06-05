@@ -5,6 +5,8 @@ import { scoreRepo } from './scorer.js';
 import { report } from './reporter.js';
 import { selectAuditConfig } from '../utils/prompt.js';
 import { createProvider } from '../utils/llm.js';
+import { buildRemediationPlan, writeRemediationPlan } from './remediation.js';
+import { withSpinner } from '../utils/spinner.js';
 
 export interface AuditOptions {
   json: boolean;
@@ -18,11 +20,26 @@ export async function runAudit(target: string, opts: AuditOptions): Promise<void
   const provider = createProvider(config.provider, config.apiKey, config.modelId);
 
   const targetDir = resolve(target);
+  const spinnerEnabled = !opts.json;
   const files = loadRepo(targetDir);
-  const mappings = await mapFiles(files.mdFiles, provider, files.usedGraphify);
-  const scored = await scoreRepo(files, mappings, provider);
+  const mappings = await withSpinner(
+    'Finding harness artifacts...',
+    spinnerEnabled,
+    () => mapFiles(files.mdFiles, provider, files.usedGraphify),
+  );
+  const scored = await withSpinner(
+    'Scoring harness quality...',
+    spinnerEnabled,
+    () => scoreRepo(files, mappings, provider),
+  );
   const totalTokens = provider.getTotalTokens();
-  report(scored, { json: opts.json, tokenUsage: totalTokens });
+  const remediation = buildRemediationPlan(scored, targetDir);
+  const planPath = await withSpinner(
+    'Writing remediation plan...',
+    spinnerEnabled,
+    async () => writeRemediationPlan(targetDir, remediation),
+  );
+  report(scored, { json: opts.json, tokenUsage: totalTokens, remediation, planPath });
 
   if (!opts.json) {
     const display =

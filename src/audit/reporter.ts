@@ -1,8 +1,11 @@
 import type { ScoredResult } from './scorer.js';
+import type { RemediationPlan } from './remediation.js';
 
 export interface ReportOptions {
   json: boolean;
   tokenUsage?: number;
+  remediation?: RemediationPlan;
+  planPath?: string;
 }
 
 function bar(score: number): string {
@@ -74,6 +77,7 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
     const out = {
       overall: scored.overall,
       ...(opts.tokenUsage !== undefined ? { token_usage: opts.tokenUsage } : {}),
+      ...(opts.planPath ? { plan_path: opts.planPath } : {}),
       subsystems: {
         identity: { score: scored.identity.score, gaps: scored.identity.gaps, files: scored.identity.files },
         verification: { score: scored.verification.score, gaps: scored.verification.gaps, files: scored.verification.files },
@@ -81,6 +85,7 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
         memory: { score: scored.memory.score, gaps: scored.memory.gaps, files: scored.memory.files },
         constraints: { score: scored.constraints.score, gaps: scored.constraints.gaps, files: scored.constraints.files },
       },
+      ...(opts.remediation ? { remediation: opts.remediation } : {}),
       crossReference: scored.crossRef,
       recommendation: getRecommendation(scored),
     };
@@ -108,7 +113,15 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
   }
 
   lines.push('');
-  lines.push(getRecommendation(scored));
+  if (opts.remediation && opts.remediation.generate.length === 0 && opts.remediation.improve.length === 0) {
+    lines.push('No remediation needed. Run `npx aiready drift` to monitor for future gaps.');
+  } else {
+    lines.push(getRecommendation(scored));
+    if (opts.planPath) {
+      lines.push(`Plan written: ${opts.planPath}`);
+      lines.push('Next: `npx aiready init --target .`');
+    }
+  }
 
   process.stdout.write(lines.join('\n') + '\n');
 }

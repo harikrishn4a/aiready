@@ -1,12 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 33.13 KB (full pipeline bundled)
-- Tests: 142/142 passing (10 test files)
+- Build: passing — dist/cli.js 47.35 KB (full pipeline bundled)
+- Tests: 151/151 passing (12 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **feat-010 complete**
+- Active feature: none — **feat-011 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -23,9 +23,10 @@
 - [x] **feat-008** — Dynamic model lists: OpenAI models fetched live from /v1/models (fallback on failure), Anthropic versioned list in models.ts, modelId replaces modelTier throughout AuditConfig
 - [x] **feat-009** — Two-stage mapper triage (5-line previews → classify 50-line previews) + session token counter logged at end of audit
 - [x] **feat-010** — Graphify integration (centrality ranking), filename-only triage fallback, fix cross-reference to use mapped file paths
+- [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-010 complete
+- nothing — feat-011 complete
 
 ## Blocked
 - nothing

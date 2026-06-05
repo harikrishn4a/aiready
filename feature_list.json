@@ -286,7 +286,31 @@
         "npm run lint: clean",
         "DECISIONS.md: new entry dated 2026-06-05 (Graphify + filename triage + cross-ref fix)"
       ],
-      "agent_notes": "loader.ts: findGraphifyOutput() checks direct and dated-subdir paths; loadFromGraph() computes degree centrality from edges. mapper.ts: triageByFilename() sends paths-only; mapFiles(mdFiles, provider, usedGraphify=false). cross-ref.ts: checkCommands/checkModules fall back to mapped identity/verification/memory files when canonical files absent. scorer.ts passes mappings to crossRef().",
+      "agent_notes": "Superseded by feat-011 for Graphify selection and mapper triage. loader.ts previously used degree centrality; mapper.ts previously used filename-only triage.",
+      "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-011",
+      "priority": 11,
+      "area": "audit",
+      "title": "Graphify semantic query, strict scoring, agent remediation plan",
+      "user_visible_behavior": "Audit selects guaranteed harness files plus semantic Graphify matches, scores with strict harness criteria, writes .aiready/plan.md for Stage 2 init, includes remediation in JSON, and shows a sea-green TTY spinner during LLM work",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm test",
+        "npm run typecheck",
+        "npm run lint"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 47.35 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 151/151 (12 test files: remediation 5, spinner 2, loader 29, reporter 18, mapper 9, scorer 11, etc.)",
+        "Manual live smoke tests not run: ANTHROPIC_API_KEY and OPENAI_API_KEY were not present in shell"
+      ],
+      "agent_notes": "loader.ts now guarantees canonical harness files, matches Graphify node labels against SUBSYSTEM_CONCEPTS, dedupes, and caps content at 6000 chars. scorer.ts uses strict course-aligned criteria and findings. remediation.ts builds generate/improve/review_manually with examples/* template refs and max_lines=300. reporter/index write .aiready/plan.md and include remediation in JSON. spinner.ts is TTY-only and disabled for JSON/CI.",
       "last_updated": "2026-06-05"
     }
   ]

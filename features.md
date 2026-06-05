@@ -164,3 +164,29 @@ Audit completes without TPM blowups on large repos. Terminal shows `Tokens used:
 **Out of scope:**
 - Stage 2 (init) work
 - Changes to loader.ts, scorer.ts, cli.ts
+
+---
+
+## feat-011: Graphify semantic query, strict scoring, agent remediation plan
+
+**What the user sees:**
+Audit output is shorter and more actionable. It writes `.aiready/plan.md` as a durable plan for humans and the future `init` command, includes remediation data in `--json`, and shows a sea-green spinner during long LLM phases.
+
+**Tasks:**
+- [x] `loader.ts` — always include root harness filenames, semantic Graphify node-label matching, dedupe, 6000-char content cap
+- [x] `mapper.ts` — align with 5-line triage previews and 50-line classification previews
+- [x] `scorer.ts` — strict course-aligned scoring criteria and findings shape
+- [x] `remediation.ts` — typed generate/improve/review_manually contract with `examples/` template references and `max_lines: 300`
+- [x] `reporter.ts` / `index.ts` — short CLI summary, JSON remediation, `.aiready/plan.md`
+- [x] `spinner.ts` — sea-green TTY-only loading spinner disabled for JSON/CI
+- [x] Tests for loader semantics, remediation, reporter JSON, spinner gate
+
+**Acceptance criteria:**
+- `npm run build`, `npm run typecheck`, `npm run lint`, and `npm test` pass
+- `.aiready/plan.md` references canonical examples templates and caps generated artifacts at 300 lines
+- JSON includes `token_usage` and `remediation.generate/improve/review_manually`
+- Stage 2 remains unimplemented
+
+**Out of scope:**
+- Running `init`
+- Automatically deleting or cleaning messy harness files

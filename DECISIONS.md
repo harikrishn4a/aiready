@@ -132,3 +132,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Keep 5-line previews for triage — marginally more context but 5-10× more tokens for a filter step. Read graph node labels for filenames — source_file is more reliable than label.
 - **Constraints introduced**: `loadRepo()` is still synchronous (uses `readFileSync` / `existsSync`). Graphify path checked at load time — no hot-reload. `mapFiles()` third param `usedGraphify` defaults to `false` so all existing callers remain compatible. `crossRef()` second param `mappings` defaults to `[]`.
 - **Revisit when**: Graphify schema changes (different node fields), or if degree centrality proves a poor proxy for harness relevance on a real corpus.
+
+---
+
+### 2026-06-05: Audit emits a durable remediation contract for init
+
+- **Decision**: Stage 1 audit now writes `.aiready/plan.md` and includes the same remediation contract in JSON. The contract has `generate`, `improve`, and `review_manually` sections, references the `examples/` templates, and sets `max_lines: 300` for generated or improved artifacts. CLI output stays short.
+- **Reason**: Stage 2 `init` should consume a stable audit contract rather than re-deriving gaps from terminal text. Humans also need a durable markdown plan they can review, diff, and keep across sessions. The 300-line cap protects agent readability and prevents generated harness files from becoming context-dense dumps.
+- **Rejected alternatives**: Terminal-only remediation output — easy to lose and hard for `init` to consume. Auto-cleaning messy files — too risky; audit should suggest manual review only. Centrality-based Graphify selection — harness files often have low centrality because few files reference them.
+- **Constraints introduced**: Graphify selection uses semantic node-label concept matching plus guaranteed root harness filenames. Spinner output is TTY-only and disabled for JSON/CI. Stage 1 may write `.aiready/plan.md`, but it must not generate or overwrite canonical harness files.
+- **Revisit when**: Stage 2 `init` is implemented and needs additional fields in the remediation contract.

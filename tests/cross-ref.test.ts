@@ -7,6 +7,9 @@ function makeFiles(overrides: Partial<RepoFiles> = {}): RepoFiles {
   return {
     mdFiles: [],
     usedGraphify: false,
+    graphifyPath: null,
+    guaranteedFiles: [],
+    conceptMatchedFiles: [],
     agentsMd: null,
     architectureMd: null,
     constraintsMd: null,

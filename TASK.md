@@ -1,47 +1,42 @@
-# TASK.md — feat-007: Provider abstraction, interactive selection, dotenv
+# TASK.md — feat-011: Graphify semantic query, strict scoring, agent remediation plan
 
 ## Feature
-feat-007 — Add LLMProvider abstraction so aiready audit works with Anthropic, OpenAI, or Ollama.
+feat-011 — Improve Stage 1 audit as a durable audit-to-init contract while keeping Stage 2 unimplemented.
 
 ## Scope
 New files:
-- src/utils/llm.ts         — LLMProvider interface + AnthropicProvider + OpenAIProvider + OllamaProvider
-- src/utils/prompt.ts      — interactive provider/model selection + API key gate
-- .env.example
-- tests/llm.test.ts
-- tests/prompt.test.ts
+- src/audit/remediation.ts — generate/improve/review_manually contract, markdown renderer, plan writer
+- src/utils/spinner.ts     — TTY-only sea-green loading spinner
+- tests/remediation.test.ts
+- tests/spinner.test.ts
 
 Modified files:
-- src/audit/mapper.ts      — swap apiKey: string for provider: LLMProvider
-- src/audit/scorer.ts      — swap apiKey: string for provider: LLMProvider
-- src/audit/index.ts       — wire selectAuditConfig + createProvider, remove old key guard
-- src/cli.ts               — add dotenv/config import, --provider and --model flags
-- tests/mapper.test.ts     — replace mockCreate pattern with mock LLMProvider
-- tests/scorer.test.ts     — same
-- tests/integration.test.ts — same
-- package.json             — add dotenv, @inquirer/prompts, openai
+- src/audit/loader.ts      — guaranteed harness files, semantic Graphify node-label matching, 6000-char content cap
+- src/audit/mapper.ts      — restore 5-line triage previews, keep 50-line classification previews
+- src/audit/scorer.ts      — strict course-aligned scoring criteria and findings shape
+- src/audit/reporter.ts    — short CLI summary + JSON remediation
+- src/audit/index.ts       — build/write `.aiready/plan.md`, pass remediation to reporter, wrap LLM phases in spinner
+- tests/*                  — update helpers and add coverage for new contracts
 
 ## Out of scope
-- No changes to loader.ts, reporter.ts, cross-ref.ts, fs.ts
 - No Stage 2 work
+- No automatic cleanup/deletion of messy harness files
+- No overwriting canonical harness artifacts
 
 ## Pass criteria
 - npm run build: zero errors
 - npm run typecheck: zero errors
 - npm run lint: clean
-- npm test: all tests pass (86+ tests)
-- node dist/cli.js audit without key → exits 1 with ERROR/WHY/FIX
-- node dist/cli.js audit --provider anthropic --model fast (with key set) → skips prompts
-- node dist/cli.js audit --provider ollama → runs without API key
+- npm test: all tests pass (151+ tests)
+- `.aiready/plan.md` is written during audit and references examples templates
+- `--json` includes `remediation` and `token_usage`
+- Generated/improved artifact items include `max_lines: 300`
 
 ## Implementation order
-1. Install deps
-2. .env.example + .gitignore
-3. src/utils/llm.ts
-4. src/utils/prompt.ts
-5. Update mapper.ts + scorer.ts signatures
-6. Update index.ts
-7. Update cli.ts
-8. Update tests (mapper, scorer, integration)
-9. New tests (llm.test.ts, prompt.test.ts)
-10. Verify
+1. Loader semantic selection
+2. Strict scorer prompt/findings
+3. Remediation contract and plan renderer
+4. Reporter/index plan + JSON wiring
+5. Spinner utility
+6. Tests
+7. Full verification and docs

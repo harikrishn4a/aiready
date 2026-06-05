@@ -178,42 +178,42 @@ describe('loadRepo — Graphify detection', () => {
   it('sets usedGraphify: true when graphify-out/graph.json exists', () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# agent guide');
     writeGraph(join(tmp, 'graphify-out'), {
-      nodes: [{ id: 'n1', file_type: 'document', source_file: 'AGENTS.md' }],
+      nodes: [{ id: 'n1', file_type: 'document', source_file: 'AGENTS.md', label: 'agent instructions' }],
       links: [{ source: 'n1', target: 'n1' }],
     });
     const r = loadRepo(tmp);
     expect(r.usedGraphify).toBe(true);
+    expect(r.guaranteedFiles).toContain('AGENTS.md');
   });
 
-  it('ranks files by degree and returns top files only', () => {
+  it('ranks graph files by semantic concept score', () => {
     writeFileSync(join(tmp, 'A.md'), '# A');
     writeFileSync(join(tmp, 'B.md'), '# B');
     writeFileSync(join(tmp, 'C.md'), '# C');
     writeGraph(join(tmp, 'graphify-out'), {
       nodes: [
-        { id: 'nA', file_type: 'document', source_file: 'A.md' },
-        { id: 'nB', file_type: 'document', source_file: 'B.md' },
-        { id: 'nC', file_type: 'document', source_file: 'C.md' },
+        { id: 'nA', file_type: 'document', source_file: 'A.md', label: 'project overview' },
+        { id: 'nB', file_type: 'document', source_file: 'B.md', label: 'verification test commands build commands' },
+        { id: 'nC', file_type: 'document', source_file: 'C.md', label: 'random release notes' },
       ],
-      // B has 2 edges, A has 1, C has 0 — B should rank first
-      links: [
-        { source: 'nA', target: 'nB' },
-        { source: 'nC', target: 'nB' },
-      ],
+      links: [],
     });
     const r = loadRepo(tmp);
     expect(r.usedGraphify).toBe(true);
     const paths = r.mdFiles.map((f) => f.path);
-    expect(paths[0]).toBe('B.md'); // highest degree
+    expect(paths[0]).toBe('B.md'); // highest concept score
     expect(paths).toContain('A.md');
+    expect(paths).not.toContain('C.md');
+    expect(r.conceptMatchedFiles).toEqual(['B.md', 'A.md']);
   });
 
   it('skips non-document nodes', () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# agent');
+    writeFileSync(join(tmp, 'CODE.md'), '# code');
     writeGraph(join(tmp, 'graphify-out'), {
       nodes: [
-        { id: 'n1', file_type: 'document', source_file: 'AGENTS.md' },
-        { id: 'n2', file_type: 'code', source_file: 'src/index.ts' },
+        { id: 'n1', file_type: 'document', source_file: 'AGENTS.md', label: 'agent instructions' },
+        { id: 'n2', file_type: 'code', source_file: 'CODE.md', label: 'architecture module map' },
       ],
       links: [{ source: 'n2', target: 'n1' }],
     });
@@ -224,7 +224,7 @@ describe('loadRepo — Graphify detection', () => {
   it('finds dated subdirectory graphify-out/YYYY-MM-DD/graph.json', () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# agent');
     writeGraph(join(tmp, 'graphify-out', '2026-06-05'), {
-      nodes: [{ id: 'n1', file_type: 'document', source_file: 'AGENTS.md' }],
+      nodes: [{ id: 'n1', file_type: 'document', source_file: 'AGENTS.md', label: 'agent instructions' }],
       links: [],
     });
     const r = loadRepo(tmp);
@@ -232,14 +232,21 @@ describe('loadRepo — Graphify detection', () => {
     expect(r.mdFiles.map((f) => f.path)).toContain('AGENTS.md');
   });
 
-  it('returns usedGraphify: false and uses walkMdFiles when graph.json is malformed', () => {
+  it('keeps guaranteed files and does not crash when graph.json is malformed', () => {
     writeFileSync(join(tmp, 'README.md'), '# readme');
+    writeFileSync(join(tmp, 'AGENTS.md'), '# agent');
     mkdirSync(join(tmp, 'graphify-out'), { recursive: true });
     writeFileSync(join(tmp, 'graphify-out', 'graph.json'), 'not valid json {{{');
     const r = loadRepo(tmp);
-    // Malformed JSON → loadFromGraph returns [] → usedGraphify still true (path was found)
-    // but mdFiles will be empty from graphify, not from walker
-    // The important behavior: no crash
-    expect(r.mdFiles).toBeDefined();
+    expect(r.usedGraphify).toBe(true);
+    expect(r.mdFiles.map((f) => f.path)).toEqual(['AGENTS.md']);
+  });
+
+  it('caps fullContent before returning repo files', () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), 'A'.repeat(7000));
+    const r = loadRepo(tmp);
+    const agents = r.mdFiles.find((f) => f.path === 'AGENTS.md');
+    expect(agents?.fullContent.length).toBeLessThan(7000);
+    expect(agents?.fullContent).toContain('[content truncated]');
   });
 });
