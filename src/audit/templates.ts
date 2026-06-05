@@ -1,6 +1,42 @@
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
-import { join, resolve } from 'path';
+import { join, resolve, basename } from 'path';
+
+export type FileType = 'markdown' | 'makefile' | 'shell' | 'json' | 'other';
+
+export function detectFileType(filename: string): FileType {
+  const base = basename(filename).toLowerCase();
+  if (base === 'makefile') return 'makefile';
+  if (base.endsWith('.sh')) return 'shell';
+  if (base.endsWith('.json')) return 'json';
+  if (base.endsWith('.md')) return 'markdown';
+  return 'other';
+}
+
+export const REQUIRED_MAKEFILE_TARGETS = [
+  'setup',
+  'dev',
+  'check|verify',
+  'test',
+  'lint',
+  'clean',
+];
+
+export const REQUIRED_INIT_SH_PATTERNS = [
+  /npm install|pip install|go mod download|cargo fetch|setup\.sh/,
+  /verify\.sh|npm test|pytest|go test|make check|make verify/,
+];
+
+export const REQUIRED_VERIFY_SH_PATTERNS = [
+  /build|compile|tsc/,
+  /test|pytest|vitest/,
+  /lint|ruff|eslint|golangci/,
+];
+
+export const REQUIRED_JSON_KEYS: Record<string, string[]> = {
+  'feature_list.json':        ['project', 'features', 'rules'],
+  'feature-list-schema.json': ['$schema', 'properties', 'required'],
+};
 
 export const TEMPLATE_SUBSYSTEM_MAP: Record<string, { primary: string[]; secondary: string[] }> = {
   identity: {

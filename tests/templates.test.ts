@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { loadTemplates, extractSectionHeadings, CANONICAL_FILENAMES } from '../src/audit/templates';
+import {
+  loadTemplates, extractSectionHeadings, CANONICAL_FILENAMES,
+  detectFileType, REQUIRED_MAKEFILE_TARGETS, REQUIRED_INIT_SH_PATTERNS, REQUIRED_VERIFY_SH_PATTERNS,
+} from '../src/audit/templates';
 
 describe('extractSectionHeadings', () => {
   it('returns empty array for content with no ## headings', () => {
@@ -71,6 +74,69 @@ describe('loadTemplates', () => {
   it('returns empty string for subsystem with no loadable templates', async () => {
     const templates = await loadTemplates('/nonexistent/path');
     expect(templates.primary['identity']).toBe('');
+  });
+});
+
+describe('detectFileType', () => {
+  it('identifies Makefile', () => {
+    expect(detectFileType('Makefile')).toBe('makefile');
+    expect(detectFileType('scripts/Makefile')).toBe('makefile');
+  });
+
+  it('identifies shell scripts', () => {
+    expect(detectFileType('scripts/init.sh')).toBe('shell');
+    expect(detectFileType('verify.sh')).toBe('shell');
+  });
+
+  it('identifies markdown', () => {
+    expect(detectFileType('AGENTS.md')).toBe('markdown');
+    expect(detectFileType('progress.md')).toBe('markdown');
+  });
+
+  it('identifies JSON', () => {
+    expect(detectFileType('feature_list.json')).toBe('json');
+    expect(detectFileType('package.json')).toBe('json');
+  });
+
+  it('returns other for unknown types', () => {
+    expect(detectFileType('README')).toBe('other');
+    expect(detectFileType('Dockerfile')).toBe('other');
+  });
+});
+
+describe('REQUIRED_MAKEFILE_TARGETS', () => {
+  it('includes the 6 required target groups', () => {
+    expect(REQUIRED_MAKEFILE_TARGETS).toContain('setup');
+    expect(REQUIRED_MAKEFILE_TARGETS).toContain('dev');
+    expect(REQUIRED_MAKEFILE_TARGETS).toContain('check|verify');
+    expect(REQUIRED_MAKEFILE_TARGETS).toContain('test');
+    expect(REQUIRED_MAKEFILE_TARGETS).toContain('lint');
+    expect(REQUIRED_MAKEFILE_TARGETS).toContain('clean');
+  });
+});
+
+describe('REQUIRED_INIT_SH_PATTERNS', () => {
+  it('matches npm install', () => {
+    expect(REQUIRED_INIT_SH_PATTERNS[0].test('npm install')).toBe(true);
+  });
+
+  it('matches verify.sh call', () => {
+    expect(REQUIRED_INIT_SH_PATTERNS[1].test('./scripts/verify.sh')).toBe(true);
+  });
+});
+
+describe('REQUIRED_VERIFY_SH_PATTERNS', () => {
+  it('matches build step', () => {
+    expect(REQUIRED_VERIFY_SH_PATTERNS[0].test('npm run build')).toBe(true);
+  });
+
+  it('matches test step', () => {
+    expect(REQUIRED_VERIFY_SH_PATTERNS[1].test('npm test')).toBe(true);
+    expect(REQUIRED_VERIFY_SH_PATTERNS[1].test('vitest')).toBe(true);
+  });
+
+  it('matches lint step', () => {
+    expect(REQUIRED_VERIFY_SH_PATTERNS[2].test('eslint src/')).toBe(true);
   });
 });
 

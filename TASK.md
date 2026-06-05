@@ -1,32 +1,40 @@
-# TASK.md — Sprint Contract
+# TASK.md — feat-018: File-type-aware structural scoring + verification baseline
 
-## Feature: feat-017 — Init plan contract + graphify context + full writes
+## Feature ID
+feat-018
 
-## Goal
-Init must execute `.aiready/plan.md` exactly (no planner re-decisions), write full LLM output (strip fences), treat empty improve targets as generate, and use Graphify context with thin-source expansion.
+## Scope — what will change
+- UPDATED `src/audit/templates.ts` — FileType enum, detectFileType(), REQUIRED_MAKEFILE_TARGETS, REQUIRED_INIT_SH_PATTERNS, REQUIRED_VERIFY_SH_PATTERNS, REQUIRED_JSON_KEYS
+- UPDATED `src/audit/scorer.ts` — file-type-aware scoreStructural() dispatch; scoreMakefileStructure(), scoreShellStructure(), scoreJsonStructure(), scoreArchitectureStructure(); verification subsystem uses baseline check
+- UPDATED `tests/templates.test.ts` — new detectFileType and required pattern tests
+- UPDATED `tests/scorer.test.ts` — new Makefile/shell/JSON/architecture structural scoring tests
 
-## Scope
-- `src/init/output.ts` — `cleanLLMOutput()`
-- `src/init/parser.ts` — parse GENERATE/IMPROVE/SKIP/SOURCE CONTEXT
-- `src/init/planner.ts` — pure parser adapter (no CANONICAL_ARTIFACTS decisions)
-- `src/init/context.ts` — graphify always-on context, thin-source expansion
-- `src/utils/graphify.ts` — shared graphify ranking (audit + init)
-- `src/init/generator.ts`, `improver.ts`, `executor.ts`, `index.ts`
-- Tests with betterworld graphify-mini fixture
+## Problems being fixed
+1. Structural scoring uses ## headings for ALL files — Makefile gets 0 because it has no headings
+2. Verification scores documentation quality instead of asking: is there a runnable baseline?
+3. architecture.md template is one minimal layer example — scorer penalises multi-layer files for not matching minimal structure
 
-## Out of scope
-- Re-running audit on betterworld (user can do with API key)
-- Writing to betterworld without user confirmation
+## Design decisions
+- detectFileType() dispatches on filename: Makefile → 'makefile', *.sh → 'shell', *.json → 'json', *.md → 'markdown', else → 'other'
+- REQUIRED_MAKEFILE_TARGETS: ['setup', 'dev', 'check|verify', 'test', 'lint', 'clean'] (pipe = alias)
+- Makefile structural scoring: extract defined targets, check required, score = present/total × 100
+- Shell structural scoring: regex pattern matching against REQUIRED_INIT_SH_PATTERNS or REQUIRED_VERIFY_SH_PATTERNS
+- JSON structural scoring: check required top-level keys for known files (feature_list.json)
+- Architecture markdown: score on Responsibilities + Must NOT + module table + data flow pattern, not exact headings
+- scoreStructural() now takes filename as first arg (breaking change — exported, update callers)
+- Verification baseline: commandExists + documented + crossRefs → 'established'/'partial'/'missing'
+  - 'established' (all three): 90
+  - 'partial' (commandExists only): 40-60
+  - 'missing': 10
+- combineScores() unchanged (40/60 split)
 
-## Verification
-```bash
-npm run build && npm run typecheck && npm run lint && npm test
-node dist/cli.js init --target <betterworld> --dry-run  # 8 IMPROVE, 5 SKIP, 0 GENERATE
-```
+## Modules (in order)
+1. src/audit/templates.ts — add FileType + detection + required patterns
+2. src/audit/scorer.ts — file-type-aware dispatch + architecture special case + verification baseline
+3. Tests updated throughout
 
-## Evidence gate
-- [x] cleanLLMOutput strips fences; written files >10 lines in tests
-- [x] planner parses plan only — betterworld dry-run matches plan
-- [x] empty improve → generate path
-- [x] graphify context tests with betterworld-mini fixture
-- [x] 237/237 tests pass
+## Completion gate
+- npm run build — zero errors
+- npm run typecheck — zero errors
+- npm run lint — clean
+- npm test — all pass including new tests
