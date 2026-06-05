@@ -1,6 +1,5 @@
-import { resolve } from 'path';
-import { existsSync } from 'fs';
 import type { LLMProvider } from '../utils/llm.js';
+import { resolveExamplesDir } from '../utils/examples-dir.js';
 import type { RepoFiles } from './loader.js';
 import type { FileMapping, Subsystem } from './mapper.js';
 import { crossRef } from './cross-ref.js';
@@ -187,14 +186,6 @@ function getTemplateSectionsForSubsystem(subsystem: string, templates: LoadedTem
     if (secs) allSections.push(...secs);
   }
   return [...new Set(allSections)];
-}
-
-function resolveExamplesDir(): string {
-  // In compiled dist: __dirname = dist/, so ../examples = project root examples
-  const fromDist = resolve(__dirname, '..', 'examples');
-  if (existsSync(fromDist)) return fromDist;
-  // In vitest (source files): __dirname = src/audit/, so ../../examples = project root examples
-  return resolve(__dirname, '..', '..', 'examples');
 }
 
 export async function scoreRepo(

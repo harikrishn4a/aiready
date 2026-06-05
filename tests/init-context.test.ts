@@ -57,6 +57,22 @@ describe('resolveArtifactSources', () => {
     expect(sourcesAreThin(tmp, ['CONSTRAINTS.md'])).toBe(true);
   });
 
+  it('includes all SOURCE CONTEXT paths when subsystem match is insufficient', () => {
+    const sourceContext = [
+      { path: 'CLAUDE.md', subsystems: ['identity'] },
+      { path: 'plan.md', subsystems: ['memory'] },
+    ];
+    const resolved = resolveArtifactSources(
+      tmp,
+      'constraints',
+      ['CONSTRAINTS.md'],
+      { constraints: ['CONSTRAINTS.md'] },
+      sourceContext,
+    );
+    expect(resolved.sourceFiles).toContain('CLAUDE.md');
+    expect(resolved.sourceFiles).toContain('plan.md');
+  });
+
   it('expands thin sources from SOURCE CONTEXT and graphify', () => {
     const sourceContext = [
       { path: 'CLAUDE.md', subsystems: ['constraints'] },

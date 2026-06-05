@@ -16,7 +16,11 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
-function mockProvider(response = '# Generated content\n\nsome content here'): LLMProvider {
+function multiLine(prefix: string, count = 5): string {
+  return [prefix, '', ...Array.from({ length: count }, (_, i) => `line ${i + 1}`)].join('\n');
+}
+
+function mockProvider(response = multiLine('# Generated content')): LLMProvider {
   return {
     chat: vi.fn().mockResolvedValue(response),
     getTotalTokens: () => 0,
@@ -74,15 +78,16 @@ describe('executeGenerate', () => {
 
   it('overwrites existing file with --force true', async () => {
     writeFileSync(join(tmp, 'PROGRESS.md'), '# existing');
-    const provider = mockProvider('# new content');
+    const body = multiLine('# new content');
+    const provider = mockProvider(body);
     await executeGenerate(BASE_GENERATE, tmp, { force: true }, 1, 1, provider);
     expect(provider.chat).toHaveBeenCalled();
-    expect(readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8')).toBe('# new content');
+    expect(readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8')).toBe(body);
   });
 
   it('overwrites with --force matching filename', async () => {
     writeFileSync(join(tmp, 'PROGRESS.md'), '# existing');
-    const provider = mockProvider('# new content');
+    const provider = mockProvider(multiLine('# new content'));
     await executeGenerate(BASE_GENERATE, tmp, { force: 'PROGRESS.md' }, 1, 1, provider);
     expect(provider.chat).toHaveBeenCalled();
   });
@@ -96,13 +101,13 @@ describe('executeGenerate', () => {
 
   it('creates parent directories when needed', async () => {
     const artifact: ArtifactPlan = { ...BASE_GENERATE, filename: 'docs/PROGRESS.md' };
-    const provider = mockProvider('# content');
+    const provider = mockProvider(multiLine('# content'));
     await executeGenerate(artifact, tmp, {}, 1, 1, provider);
     expect(existsSync(join(tmp, 'docs', 'PROGRESS.md'))).toBe(true);
   });
 
   it('calls provider with fast: false for quality output', async () => {
-    const provider = mockProvider('# content');
+    const provider = mockProvider(multiLine('# content'));
     await executeGenerate(BASE_GENERATE, tmp, {}, 1, 1, provider);
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[2]).toMatchObject({ fast: false });
@@ -129,15 +134,16 @@ describe('executeImprove', () => {
 
   it('writes updated content when file exists', async () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# original');
-    const provider = mockProvider('# updated content');
+    const body = multiLine('# updated content');
+    const provider = mockProvider(body);
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 1, provider);
     expect(provider.chat).toHaveBeenCalled();
-    expect(readFileSync(join(tmp, 'AGENTS.md'), 'utf-8')).toBe('# updated content');
+    expect(readFileSync(join(tmp, 'AGENTS.md'), 'utf-8')).toBe(body);
   });
 
   it('passes current file content to provider', async () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# original content to improve');
-    const provider = mockProvider('# improved');
+    const provider = mockProvider(multiLine('# improved'));
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 1, provider);
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1]).toContain('# original content to improve');
@@ -145,7 +151,7 @@ describe('executeImprove', () => {
 
   it('reads file fresh from disk on each call', async () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# v1');
-    const provider = mockProvider('# v2');
+    const provider = mockProvider(multiLine('# v2'));
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 2, provider);
     writeFileSync(join(tmp, 'AGENTS.md'), '# v2 modified externally');
     await executeImprove(BASE_IMPROVE, tmp, {}, 2, 2, provider);
@@ -155,7 +161,7 @@ describe('executeImprove', () => {
 
   it('calls provider with fast: false', async () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# original');
-    const provider = mockProvider('# improved');
+    const provider = mockProvider(multiLine('# improved'));
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 1, provider);
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[2]).toMatchObject({ fast: false });
@@ -176,5 +182,23 @@ describe('executeImprove', () => {
     expect(written.split('\n').length).toBeGreaterThan(10);
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1]).toContain('TEMPLATE START');
+  });
+
+  it('throws when LLM returns empty content on improve', async () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# original');
+    const provider = mockProvider('');
+    await expect(executeImprove(BASE_IMPROVE, tmp, {}, 1, 1, provider)).rejects.toThrow(/empty or too short/);
+  });
+
+  it('throws when LLM returns empty content on empty-file generate path', async () => {
+    writeFileSync(join(tmp, 'CONSTRAINTS.md'), '');
+    const artifact: ArtifactPlan = {
+      ...BASE_IMPROVE,
+      filename: 'CONSTRAINTS.md',
+      templateFile: 'examples/constraints.md',
+      subsystem: 'constraints',
+    };
+    const provider = mockProvider('  ');
+    await expect(executeImprove(artifact, tmp, {}, 1, 1, provider)).rejects.toThrow(/empty or too short/);
   });
 });

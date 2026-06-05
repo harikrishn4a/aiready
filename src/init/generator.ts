@@ -1,17 +1,16 @@
 import { readFileSync, existsSync } from 'fs';
 import { readFile } from 'fs/promises';
-import { resolve, join } from 'path';
+import { join } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import type { ArtifactPlan } from './planner.js';
 import type { SourceContextEntry } from './context.js';
 import { resolveArtifactSources, formatGraphifyContext } from './context.js';
+import { loadExampleTemplate, resolveExamplesDir } from '../utils/examples-dir.js';
 
 export interface InitContext {
   subsystemSources: Record<string, string[]>;
   sourceContext: SourceContextEntry[];
 }
-
-const PACKAGE_ROOT = resolve(__dirname, '..');
 
 const SYSTEM_PROMPT = `You are consolidating information from a messy repository into a
 clean, canonical harness artifact for AI coding agents.
@@ -36,15 +35,21 @@ function readCapped(filePath: string, cap = 4000): string | null {
 }
 
 function loadTemplate(templateFile: string): string {
-  const candidates = [
-    resolve(PACKAGE_ROOT, templateFile),
-    resolve(process.cwd(), templateFile),
-  ];
-  for (const p of candidates) {
-    const content = readCapped(p, 20000);
-    if (content !== null) return content;
-  }
+  const fromExamples = loadExampleTemplate(templateFile);
+  if (fromExamples) return fromExamples;
+  const cwdPath = join(process.cwd(), templateFile);
+  if (existsSync(cwdPath)) return readFileSync(cwdPath, 'utf-8').slice(0, 20000);
   return '';
+}
+
+function assertTemplateLoaded(templateFile: string, template: string): void {
+  if (template.trim().length > 0) return;
+  const examplesDir = resolveExamplesDir();
+  throw new Error(
+    `ERROR: Template not found: ${templateFile} (looked in ${examplesDir})\n` +
+    `WHY: Init cannot generate ${templateFile} without the canonical examples/ template structure\n` +
+    `FIX: Reinstall aiready from a build that bundles dist/examples/, or run from the aiready repo after npm run build`,
+  );
 }
 
 async function detectTechStack(target: string): Promise<string> {
@@ -84,13 +89,12 @@ export async function generateArtifact(
   provider: LLMProvider,
   initContext?: InitContext,
 ): Promise<string> {
-  // Blank templates: copy directly without LLM call
-  if (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename)) {
-    const template = loadTemplate(artifact.templateFile);
-    if (template) return template;
-  }
-
   const template = loadTemplate(artifact.templateFile);
+  assertTemplateLoaded(artifact.templateFile, template);
+
+  if (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename)) {
+    return template;
+  }
 
   const resolved = resolveArtifactSources(
     target,

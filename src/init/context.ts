@@ -63,6 +63,12 @@ export function resolveArtifactSources(
     for (const f of sourceContextForSubsystem(sourceContext, subsystem)) {
       if (!sourceFiles.includes(f)) sourceFiles.push(f);
     }
+    // Include all SOURCE CONTEXT paths when still thin (e.g. CLAUDE.md tagged identity-only)
+    if (sourcesAreThin(target, sourceFiles)) {
+      for (const entry of sourceContext) {
+        if (!sourceFiles.includes(entry.path)) sourceFiles.push(entry.path);
+      }
+    }
     if (graphPath) {
       const ranked = rankGraphifyFiles(target, graphPath, subsystem, THIN_EXPAND_LIMIT);
       for (const f of ranked) {

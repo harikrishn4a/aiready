@@ -14,10 +14,31 @@ export interface InitFlags {
   yes?: boolean;
 }
 
+const MIN_WRITE_LINES = 3;
+
 function isForced(flags: InitFlags, filename: string): boolean {
   if (flags.force === true) return true;
   if (typeof flags.force === 'string') return flags.force === filename;
   return false;
+}
+
+function assertWritableContent(filename: string, content: string): void {
+  const trimmed = content.trim();
+  const lines = content.split('\n').length;
+  if (trimmed.length === 0 || lines < MIN_WRITE_LINES) {
+    throw new Error(
+      `ERROR: Generated content for ${filename} is empty or too short (${lines} lines)\n` +
+      `WHY: The LLM returned insufficient content to write a useful harness artifact\n` +
+      `FIX: Re-run with --force ${filename} after verifying templates load from dist/examples/ and source context is available`,
+    );
+  }
+}
+
+function writeArtifact(filePath: string, content: string, filename: string): number {
+  assertWritableContent(filename, content);
+  mkdirSync(dirname(filePath), { recursive: true });
+  writeFileSync(filePath, content, 'utf-8');
+  return content.split('\n').length;
 }
 
 export async function executeGenerate(
@@ -47,9 +68,7 @@ export async function executeGenerate(
   }
 
   const content = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
-  mkdirSync(dirname(filePath), { recursive: true });
-  writeFileSync(filePath, content, 'utf-8');
-  const lines = content.split('\n').length;
+  const lines = writeArtifact(filePath, content, artifact.filename);
   console.log(`      ✓ Written — ${lines} lines\n`);
 }
 
@@ -81,6 +100,6 @@ export async function executeImprove(
   } else {
     updatedContent = cleanLLMOutput(await improveArtifact(artifact, target, provider, initContext));
   }
-  writeFileSync(filePath, updatedContent, 'utf-8');
-  console.log(`      ✓ Patched\n`);
+  const lines = writeArtifact(filePath, updatedContent, artifact.filename);
+  console.log(`      ✓ Written — ${lines} lines\n`);
 }
