@@ -2,9 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import type { ArtifactPlan } from './planner.js';
-import { generateArtifact, type InitContext } from './generator.js';
+import { generateArtifact, loadTemplate, type InitContext } from './generator.js';
 import { improveArtifact } from './improver.js';
 import { cleanLLMOutput } from './output.js';
+import { correctHeadings } from './corrector.js';
 
 export interface InitFlags {
   provider?: string;
@@ -67,8 +68,19 @@ export async function executeGenerate(
     return;
   }
 
-  const content = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
-  const lines = writeArtifact(filePath, content, artifact.filename);
+  const rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
+  let finalContent = rawContent;
+  if (!artifact.generateOnly) {
+    const template = loadTemplate(artifact.templateFile);
+    const { content: corrected, corrections } = await correctHeadings(
+      rawContent, template, artifact.filename, provider,
+    );
+    finalContent = cleanLLMOutput(corrected);
+    if (corrections.length > 0) {
+      console.log(`      ↻ Corrected: ${corrections.join(', ')}`);
+    }
+  }
+  const lines = writeArtifact(filePath, finalContent, artifact.filename);
   console.log(`      ✓ Written — ${lines} lines\n`);
 }
 
@@ -93,13 +105,21 @@ export async function executeImprove(
   }
 
   const currentContent = readFileSync(filePath, 'utf-8');
-  let updatedContent: string;
+  let rawContent: string;
   if (currentContent.trim().length === 0) {
     console.log(`      Empty file — using generate path`);
-    updatedContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
+    rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
   } else {
-    updatedContent = cleanLLMOutput(await improveArtifact(artifact, target, provider, initContext));
+    rawContent = cleanLLMOutput(await improveArtifact(artifact, target, provider, initContext));
   }
-  const lines = writeArtifact(filePath, updatedContent, artifact.filename);
+  const template = loadTemplate(artifact.templateFile);
+  const { content: corrected, corrections } = await correctHeadings(
+    rawContent, template, artifact.filename, provider,
+  );
+  const finalContent = cleanLLMOutput(corrected);
+  if (corrections.length > 0) {
+    console.log(`      ↻ Corrected: ${corrections.join(', ')}`);
+  }
+  const lines = writeArtifact(filePath, finalContent, artifact.filename);
   console.log(`      ✓ Written — ${lines} lines\n`);
 }

@@ -155,8 +155,12 @@ describe('executeImprove', () => {
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 2, provider);
     writeFileSync(join(tmp, 'AGENTS.md'), '# v2 modified externally');
     await executeImprove(BASE_IMPROVE, tmp, {}, 2, 2, provider);
-    const secondCall = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[1];
-    expect(secondCall[1]).toContain('# v2 modified externally');
+    // Find the improve call (not a corrector LLM call) that contains the modified content
+    const allCalls = (provider.chat as ReturnType<typeof vi.fn>).mock.calls;
+    const freshReadCall = allCalls.find((c: [string, string, ...unknown[]]) =>
+      c[1].includes('# v2 modified externally'),
+    );
+    expect(freshReadCall).toBeDefined();
   });
 
   it('calls provider with fast: false', async () => {

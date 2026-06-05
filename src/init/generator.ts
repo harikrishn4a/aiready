@@ -54,7 +54,7 @@ function readCapped(filePath: string, cap = 4000): string | null {
   return readFileSync(filePath, 'utf-8').slice(0, cap);
 }
 
-function loadTemplate(templateFile: string): string {
+export function loadTemplate(templateFile: string): string {
   const fromExamples = loadExampleTemplate(templateFile);
   if (fromExamples) return fromExamples;
   const cwdPath = join(process.cwd(), templateFile);
