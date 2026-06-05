@@ -461,6 +461,29 @@
       "last_updated": "2026-06-05"
     },
     {
+      "id": "feat-019",
+      "priority": 19,
+      "area": "init",
+      "title": "Expanded canonical artifact set, generateOnly flag, remove score-gated SKIP",
+      "user_visible_behavior": "npx aiready init generates 19 canonical artifacts (was 13): adds structure.md, feature-list-schema.json, quality-document.md, evaluator_rubric.md, clean-state-checklist.md, startup.md. Makefile/scripts/TASK/features/QUALITY/etc. are generateOnly — generated once and never automatically improved. Non-generateOnly artifacts always go to IMPROVE if they exist; no score threshold skips them. plan.md shows (template copy — no source context needed) for generateOnly GENERATE items.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 103.43 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 310/310 (21 test files)"
+      ],
+      "agent_notes": "CANONICAL_ARTIFACTS expanded to 19 entries in remediation.ts with generateOnly flag. isEmpty() exported — strips > note lines and {{placeholders}}, returns true if < 50 chars. buildInitPlan() re-derives all GENERATE/IMPROVE/SKIP decisions from CANONICAL_ARTIFACTS + filesystem; plan.md used only for overall score, subsystemSources, sourceContext. generator.ts short-circuits LLM call for all generateOnly artifacts. renderRemediationMarkdown shows '(template copy — no source context needed)' for generateOnly GENERATE items. init-planner.test.ts completely rewritten (16 tests). remediation.test.ts: 5 new renderRemediationMarkdown completeness tests, 7 CANONICAL_ARTIFACTS coverage tests.",
+      "last_updated": "2026-06-05"
+    },
+    {
       "id": "feat-018",
       "priority": 18,
       "area": "audit",

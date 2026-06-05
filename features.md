@@ -209,3 +209,24 @@ Makefile and shell scripts are scored on their actual content (target presence, 
 - `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` all pass
 - Makefile with all 6 required targets scores 100 structural
 - Repo with Makefile + `make check` documented in AGENTS.md → verification baseline = established → contentScore = 90
+
+---
+
+## feat-019: Expanded canonical artifact set, generateOnly flag, remove score-gated SKIP
+
+**What the user sees:**
+`npx aiready init` now generates all 19 canonical harness artifacts (was 13). The 6 new artifacts — `structure.md`, `feature-list-schema.json`, `quality-document.md`, `evaluator_rubric.md`, `clean-state-checklist.md`, `startup.md` — are added to the planner's GENERATE list when missing. Artifacts like `Makefile`, `scripts/init.sh`, and `scripts/verify.sh` are `generateOnly`: they are generated once if missing, and never automatically improved afterward (developer owns them). No harness artifact is silently skipped because its score is >= 80 — all non-generateOnly artifacts always appear in the plan as GENERATE or IMPROVE. `plan.md` GENERATE section shows `(template copy — no source context needed)` for generateOnly items.
+
+**Tasks:**
+- [x] `remediation.ts` — `generateOnly: boolean` added to `CanonicalArtifactDef`; `CANONICAL_ARTIFACTS` expanded from 13 to 19; `isEmpty()` exported; `SOURCE_ONLY_FILES` exported; removed `SKIP_THRESHOLD`; decision logic: missing → generate, generateOnly + exists + isEmpty → generate, generateOnly + exists + !isEmpty → skip, !generateOnly + exists → improve
+- [x] `remediation.ts` — `makeGenerateItem()` passes `generateOnly` flag; skips source lookup for generateOnly items; `renderRemediationMarkdown()` shows `(template copy — no source context needed)` for generateOnly GENERATE items
+- [x] `planner.ts` — Rewritten: imports `CANONICAL_ARTIFACTS`, `isEmpty` from `remediation.ts`; `buildInitPlan()` re-derives all GENERATE/IMPROVE/SKIP decisions from CANONICAL_ARTIFACTS + filesystem; `ArtifactPlan` gets `generateOnly: boolean`; plan.md used only for `overall`, `subsystemSources`, `sourceContext`
+- [x] `generator.ts` — Short-circuits LLM call for all `generateOnly` artifacts (template copy)
+- [x] Tests — `remediation.test.ts`: new `CANONICAL_ARTIFACTS` block (7 tests) + `renderRemediationMarkdown completeness` block (5 tests) replacing old score-gated behavior tests; `init-planner.test.ts` completely rewritten (16 tests)
+
+**Acceptance criteria:**
+- `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` all pass (310 tests)
+- `buildInitPlan()` returns exactly 19 artifacts regardless of plan.md GENERATE/IMPROVE/SKIP content
+- Non-generateOnly files always go to IMPROVE if they exist, never SKIP
+- generateOnly files with content go to SKIP; empty generateOnly files go to GENERATE with `alwaysGenerate=true`
+- `sourceFiles` only contains files that actually exist in the target repo
