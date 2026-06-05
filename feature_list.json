@@ -505,6 +505,29 @@
       ],
       "agent_notes": "templates.ts: FileType type, detectFileType(), REQUIRED_MAKEFILE_TARGETS, REQUIRED_INIT_SH_PATTERNS, REQUIRED_VERIFY_SH_PATTERNS, REQUIRED_JSON_KEYS. scorer.ts: scoreMakefileStructure(), scoreShellStructure(), scoreJsonStructure(), scoreArchitectureStructure(), updated scoreStructural(filename, content, sections) with file-type dispatch; per-file structural aggregation in scoreRepo (buildSubsystemContent now returns fileContents Map); BaselineCheck interface, checkVerificationBaseline(), scoreFromBaseline() replaces LLM content score for verification. reporter.ts: Baseline line shown for verification.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-020",
+      "priority": 20,
+      "area": "init",
+      "title": "Heading enforcement, post-generation correction pass, ora spinner",
+      "user_visible_behavior": "Generated harness artifacts keep exact template headings (e.g. '## Current State' not '## Current Build Status'). After each LLM write, a deterministic heading corrector runs: drifted headings are replaced via Dice bigram similarity (threshold 0.6), genuinely missing sections are added via a focused LLM call. A spinner shows 'Generating...' / 'Correcting headings...' during each artifact's LLM call, then stops cleanly. generateOnly artifacts (template copies) skip both the spinner and the corrector.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 109.54 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 331/331 (23 test files)"
+      ],
+      "agent_notes": "Module 1: generator.ts SYSTEM_PROMPT replaced with strict heading rules (exact character-for-character, lists '## Current State', '## Stack', '## What this is' as examples). Module 2: new src/init/corrector.ts with findDriftedHeadings() (Dice bigram similarity), replaceHeadings() (regex replace), correctHeadings() (deterministic + optional LLM for missing sections); wired into both executeGenerate and executeImprove before write; cleanLLMOutput applied to corrected output. Module 3: ora@5 spinner in executor.ts (not ora@8 — ESM-only breaks CJS bundle); spinner skipped for generateOnly artifacts; 7 spinner tests with vi.mock('ora'). DECISIONS.md updated with ora@5 rationale.",
+      "last_updated": "2026-06-05"
     }
   ]
 }

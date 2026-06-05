@@ -230,3 +230,27 @@ Makefile and shell scripts are scored on their actual content (target presence, 
 - Non-generateOnly files always go to IMPROVE if they exist, never SKIP
 - generateOnly files with content go to SKIP; empty generateOnly files go to GENERATE with `alwaysGenerate=true`
 - `sourceFiles` only contains files that actually exist in the target repo
+
+---
+
+## feat-020: Heading enforcement, correction pass, spinner
+
+**What the user sees:**
+`npx aiready init` generated files keep exact template headings. `## Current State` stays `## Current State` — not `## Current Build Status`. After each LLM write, any paraphrased headings are fixed automatically (logged as `↻ Corrected: Tech Stack → Stack`). Missing sections are added via a focused LLM call. A spinner shows `Generating...` / `Correcting headings...` during each artifact's LLM call and stops cleanly after writing.
+
+**Tasks:**
+- [x] `generator.ts` — Replace `SYSTEM_PROMPT` with `GENERATION_SYSTEM` that explicitly names required headings and demands character-for-character match
+- [x] `src/init/corrector.ts` (new) — `findDriftedHeadings()` (Dice bigram similarity, threshold 0.6); `replaceHeadings()` (regex replace, preserves content under headings); `correctHeadings()` (deterministic + optional LLM for genuinely missing sections)
+- [x] `executor.ts` — Wire corrector after every `executeGenerate` and `executeImprove` call; apply `cleanLLMOutput` to corrected output; log corrections
+- [x] `executor.ts` — Add `ora@5` spinner: starts with "Generating...", updates to "Correcting headings...", stops cleanly, calls `fail()` on error; skipped for `generateOnly` artifacts
+- [x] Tests — `init-generator.test.ts`: 2 new heading-enforcement tests; `init-corrector.test.ts`: 12 tests for replaceHeadings/findDriftedHeadings/correctHeadings; `init-executor-spinner.test.ts`: 7 spinner tests with `vi.mock('ora')`
+
+**Acceptance criteria:**
+- `npm run build`, `npm run typecheck`, `npm run lint`, `npm test` all pass (331 tests)
+- `findDriftedHeadings("## Tech Stack", "## Stack")` → drifted: ["Tech Stack"], canonical: ["Stack"]
+- `replaceHeadings` preserves all content under replaced heading
+- `correctHeadings` does NOT call LLM when headings already match template
+- Spinner `start()` called before LLM, `stop()` called after; `fail()` called on error
+
+**Constraints:**
+- `ora@5` (CJS-compatible) not `ora@8` (ESM-only breaks tsup CJS bundle)

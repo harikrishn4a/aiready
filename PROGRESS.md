@@ -1,12 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 103.43 KB (full pipeline + Stage 2 bundled)
-- Tests: 310/310 passing (21 test files)
+- Build: passing — dist/cli.js 109.54 KB (full pipeline + Stage 2 bundled)
+- Tests: 331/331 passing (23 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **feat-019 complete**
+- Active feature: none — **feat-020 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -26,7 +26,7 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-019 complete
+- nothing — feat-020 complete
 
 ## Blocked
 - nothing
@@ -71,6 +71,7 @@
 - [x] **feat-017** — Init plan contract: GENERATE/IMPROVE/SKIP/SOURCE CONTEXT parsing; graphify always-on context; LLM writes with clean output; thin-source detection; empty improve → generate
 - [x] **feat-018** — File-type-aware structural scoring: detectFileType() dispatches Makefile → target check, *.sh → pattern match, *.json → key check, architecture.md → pattern check; scoreStructural() takes filename; per-file structural aggregation; verification baseline check (checkVerificationBaseline + scoreFromBaseline) replaces LLM content scoring for verification subsystem; reporter shows baseline status
 - [x] **feat-019** — Expanded canonical artifact set: 19 artifacts (was 13), `generateOnly` flag for Makefile/scripts/TASK/features/QUALITY/quality-document/evaluator_rubric/clean-state-checklist/startup; removed score-gated SKIP for non-generateOnly artifacts; buildInitPlan() re-derives all decisions from CANONICAL_ARTIFACTS + filesystem; renderRemediationMarkdown shows template-copy notation for generateOnly items
+- [x] **feat-020** — Heading enforcement: strict SYSTEM_PROMPT rules; corrector.ts (Dice bigram similarity + regex replace + optional LLM for missing sections); ora@5 spinner in executor.ts showing Generating.../Correcting headings... per artifact
 
 ## Backlog — Stage 3+
 - Stage 3: analyze command (semantic gap analysis)
