@@ -39,7 +39,7 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
     }
   }
 
-  const plan = parsePlan(planPath);
+  const plan = await parsePlan(planPath);
   if (!plan) {
     console.error('Could not parse .aiready/plan.md. Run `npx aiready audit` first.');
     process.exit(1);
@@ -50,6 +50,7 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
 
   if (total === 0) {
     console.log('Nothing to do — repository harness appears complete.');
+    console.log('Run `npx aiready drift` to check for stale content.');
     return;
   }
 
@@ -58,8 +59,8 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
     for (let i = 0; i < plan.generate.length; i++) {
       const item = plan.generate[i];
       console.log(`[${i + 1}/${total}] Would generate: ${item.filename}`);
-      if (item.sourceSignals.length > 0) {
-        console.log(`      Source: ${item.sourceSignals.join(', ')}`);
+      if (item.sourceFiles.length > 0) {
+        console.log(`      Source: ${item.sourceFiles.join(', ')}`);
       }
       console.log(`      Template: ${item.templateFile}`);
       console.log('');

@@ -1,24 +1,21 @@
-import { readFileSync, existsSync } from 'fs';
+import { readFile } from 'fs/promises';
+import { existsSync } from 'fs';
 
 export interface GenerateItem {
-  filename: string;
   subsystem: string;
-  required: string;
+  filename: string;
   templateFile: string;
-  sourceSignals: string[];
-  writePolicy: string[];
+  sourceFiles: string[];
+  required: string;
 }
 
 export interface ImproveItem {
-  filename: string;
   subsystem: string;
+  filename: string;
   section: string;
   missing: string;
   fix: string;
-  templateSection: string;
   sourceFiles: string[];
-  writePolicy: string[];
-  findings: string[];
 }
 
 export interface InitPlan {
@@ -27,40 +24,19 @@ export interface InitPlan {
   improve: ImproveItem[];
 }
 
-const SUBSYSTEM_TO_SECTION: Record<string, string> = {
-  identity: 'agent entry point',
-  verification: 'verification section',
-  state: 'current state section',
-  memory: 'module map',
-  constraints: 'hard constraints',
-};
+function isPlanFile(filename: string): boolean {
+  return filename === 'plan.md' || filename.endsWith('.aiready/plan.md') || filename === '.aiready/plan.md';
+}
 
 function splitTokens(value: string): string[] {
   return value.split(',').map((s) => s.trim()).filter(Boolean);
 }
 
-function parseProperties(lines: string[]): Record<string, string | string[]> {
-  const props: Record<string, string | string[]> = {};
-  let listKey: string | null = null;
-
+function parseProperties(lines: string[]): Record<string, string> {
+  const props: Record<string, string> = {};
   for (const line of lines) {
-    if (/^  - /.test(line)) {
-      if (listKey) {
-        (props[listKey] as string[]).push(line.replace(/^  - /, '').trim());
-      }
-      continue;
-    }
-    listKey = null;
     const m = line.match(/^- ([a-z_]+):\s*(.*)/);
-    if (!m) continue;
-    const key = m[1];
-    const val = m[2].trim();
-    if (val === '') {
-      props[key] = [];
-      listKey = key;
-    } else {
-      props[key] = val;
-    }
+    if (m) props[m[1]] = m[2].trim();
   }
   return props;
 }
@@ -81,18 +57,18 @@ function parseItems(section: string): Array<{ name: string; lines: string[] }> {
     const nl = part.indexOf('\n');
     if (nl === -1) continue;
     const name = part.slice(0, nl).trim();
-    if (!name) continue;
+    if (!name || name === '(none)') continue;
     items.push({ name, lines: part.slice(nl + 1).split('\n') });
   }
   return items;
 }
 
-export function parsePlan(planPath: string): InitPlan | null {
+export async function parsePlan(planPath: string): Promise<InitPlan | null> {
   if (!existsSync(planPath)) return null;
 
   let content: string;
   try {
-    content = readFileSync(planPath, 'utf-8');
+    content = await readFile(planPath, 'utf-8');
   } catch {
     return null;
   }
@@ -102,32 +78,29 @@ export function parsePlan(planPath: string): InitPlan | null {
   const overall = parseInt(overallMatch[1], 10);
 
   const generate: GenerateItem[] = [];
-  for (const item of parseItems(extractSection(content, 'Missing Artifacts'))) {
+  for (const item of parseItems(extractSection(content, 'GENERATE'))) {
+    if (isPlanFile(item.name)) continue;
     const p = parseProperties(item.lines);
     generate.push({
       filename: item.name,
-      subsystem: typeof p['subsystem'] === 'string' ? p['subsystem'] : '',
-      required: typeof p['required_sections'] === 'string' ? p['required_sections'] : '',
-      templateFile: typeof p['template'] === 'string' ? p['template'] : '',
-      sourceSignals: typeof p['source_signals'] === 'string' ? splitTokens(p['source_signals']) : [],
-      writePolicy: Array.isArray(p['write_policy']) ? (p['write_policy'] as string[]) : [],
+      subsystem: p['subsystem'] ?? '',
+      templateFile: p['template'] ?? '',
+      sourceFiles: splitTokens(p['source_files'] ?? ''),
+      required: p['required'] ?? '',
     });
   }
 
   const improve: ImproveItem[] = [];
-  for (const item of parseItems(extractSection(content, 'Weak Artifacts'))) {
+  for (const item of parseItems(extractSection(content, 'IMPROVE'))) {
+    if (isPlanFile(item.name)) continue;
     const p = parseProperties(item.lines);
-    const subsystem = typeof p['subsystem'] === 'string' ? p['subsystem'] : '';
     improve.push({
       filename: item.name,
-      subsystem,
-      section: SUBSYSTEM_TO_SECTION[subsystem] ?? subsystem,
-      missing: typeof p['missing'] === 'string' ? p['missing'] : '',
-      fix: typeof p['fix'] === 'string' ? p['fix'] : '',
-      templateSection: typeof p['template_section'] === 'string' ? p['template_section'] : '',
-      sourceFiles: typeof p['use_as_sources'] === 'string' ? splitTokens(p['use_as_sources']) : [],
-      writePolicy: Array.isArray(p['write_policy']) ? (p['write_policy'] as string[]) : [],
-      findings: Array.isArray(p['findings']) ? (p['findings'] as string[]) : [],
+      subsystem: p['subsystem'] ?? '',
+      section: p['section'] ?? '',
+      missing: p['missing'] ?? '',
+      fix: p['fix'] ?? '',
+      sourceFiles: splitTokens(p['source_files'] ?? ''),
     });
   }
 

@@ -1,37 +1,31 @@
-# TASK.md — feat-012: Stage 2 init command
+# TASK.md — feat-013: Fix init pipeline (parser, reporter format, generator, improver)
 
 ## Feature ID
-feat-012
+feat-013
 
-## Goal
-Implement `npx aiready init --target .` — reads `.aiready/plan.md` (written by Stage 1 audit),
-executes the remediation contract, and generates or improves missing harness artifacts using LLM.
+## Bugs being fixed
+1. plan.md treated as an IMPROVE target — must never appear in generate/improve lists
+2. parser.ts reads old `## Missing Artifacts` format — plan.md now writes `## GENERATE`/`## IMPROVE`
+3. No new artifacts created — consequence of bugs 1+2
 
-## Design principles
-- One artifact per LLM call — never batch multiple artifacts
-- Read source files fresh from disk before each call
-- Write each artifact before moving to the next
-- Re-run audit after all artifacts written — show before/after score
-- Never overwrite existing files unless --force is passed
-- --force can target a single file: --force CONSTRAINTS.md
+## Design decisions
+- Non-canonical mapped file + score < 60 → GENERATE canonical artifact (not IMPROVE non-canonical)
+- plan.md / .aiready/plan.md always excluded from generate/improve at both build and parse time
+- `source_files` replaces `source_signals` — actual file paths only, no description strings
+- `parsePlan` is async (uses fs/promises)
+- LLM calls use `{ fast: false }` for quality output
 
-## Modules to create
-
-| File | Responsibility |
-|---|---|
-| `src/init/parser.ts` | Parse `.aiready/plan.md` into typed `InitPlan` |
-| `src/init/generator.ts` | Generate new artifact from template + source context (1 LLM call) |
-| `src/init/improver.ts` | Improve a section of an existing artifact (1 LLM call) |
-| `src/init/executor.ts` | Write lifecycle — skip/force logic, console output, file writes |
-| `src/init/scorer.ts` | Lightweight re-audit: returns `overall` score using existing audit pipeline |
-| `src/init/index.ts` | Main entry point: orchestrates the full init flow |
-
-## CLI registration
-- `src/cli.ts` — add `init` command with `--target`, `--provider`, `--model`, `--force [filename]`, `--dry-run`
+## Modules (in order)
+1. Create fixture files
+2. Rewrite `src/init/parser.ts` — new format, async
+3. Update `src/audit/remediation.ts` — new format output, non-canonical logic
+4. Update `src/init/generator.ts` — sourceFiles, fast: false
+5. Update `src/init/improver.ts` — sourceFiles, fast: false
+6. Update `src/init/executor.ts` + `src/init/index.ts` — new types, await parsePlan
 
 ## Completion gate
-- [ ] `npm run build` — zero errors
-- [ ] `npm run typecheck` — zero errors
-- [ ] `npm run lint` — clean
-- [ ] `npm test` — all pass, no regressions
-- [ ] `node dist/cli.js init --target ./examples/bare-repo --dry-run` shows plan
+- npm run build — zero errors
+- npm run typecheck — zero errors
+- npm run lint — clean
+- npm test — all pass including new init/parser tests
+- node dist/cli.js init --target ./examples/bare-repo --dry-run — shows items

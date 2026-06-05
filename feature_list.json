@@ -338,6 +338,31 @@
       ],
       "agent_notes": "src/init/parser.ts parses plan.md into InitPlan. src/init/generator.ts reads template from examples/ (resolved via __dirname) + source files from target repo. src/init/improver.ts reads current file content fresh + source context. src/init/executor.ts handles skip/force/write lifecycle. src/init/scorer.ts reuses full audit pipeline to return overall score. src/init/index.ts: dry-run path shows plan without LLM, normal path creates provider and executes sequentially. renderRemediationMarkdown updated to include subsystem field in improve items so parser can extract it.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-013",
+      "priority": 13,
+      "area": "init",
+      "title": "Fix init pipeline — new plan format, non-canonical logic, async parser",
+      "user_visible_behavior": "npx aiready init correctly reads GENERATE/IMPROVE sections from plan.md, creates canonical artifacts instead of improving non-canonical files, never treats plan.md as an artifact target, and uses quality (non-fast) LLM calls",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test",
+        "node dist/cli.js init --target ./examples/bare-repo --dry-run"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 62.68 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 188/188 (14 test files)",
+        "node dist/cli.js init --target ./examples/bare-repo --dry-run: shows 4 would-generate items (AGENTS.md, PROGRESS.md, ARCHITECTURE.md, CONSTRAINTS.md)"
+      ],
+      "agent_notes": "Three bugs fixed: (1) plan.md was treated as an improve target — fixed by isPlanFile() guard in both remediation.ts and parser.ts. (2) GENERATE items not extracted — fixed by changing renderRemediationMarkdown to emit ## GENERATE/## IMPROVE/## SOURCE CONTEXT sections and updating parser to read those. (3) Non-canonical files now trigger GENERATE of canonical artifact instead of IMPROVE of the non-canonical file. parsePlan is now async (fs/promises). source_signals renamed to source_files throughout. { fast: false } added to all LLM calls in generator and improver.",
+      "last_updated": "2026-06-05"
     }
   ]
 }

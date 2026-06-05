@@ -1,12 +1,12 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 65.64 KB (full pipeline + Stage 2 bundled)
-- Tests: 191/191 passing (14 test files)
+- Build: passing — dist/cli.js 62.68 KB (full pipeline + Stage 2 bundled)
+- Tests: 188/188 passing (14 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **feat-012 complete**
+- Active feature: none — **feat-013 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -26,7 +26,7 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-012 complete
+- nothing — feat-013 complete
 
 ## Blocked
 - nothing
@@ -64,6 +64,7 @@
 
 ## Completed — Stage 2
 - [x] **feat-012** — `npx aiready init`: parser (plan.md → InitPlan), generator (template + source context → artifact), improver (section-level LLM patch), executor (skip/force/write lifecycle), scorer (pipeline reuse for before/after delta), index (dry-run, sequential execute, re-score)
+- [x] **feat-013** — Fix init pipeline: new `## GENERATE`/`## IMPROVE`/`## SOURCE CONTEXT` plan.md format; async parser; `source_files` field replaces `source_signals`; non-canonical files → GENERATE canonical artifact; `plan.md` excluded from generate/improve targets; `{ fast: false }` for quality LLM output
 
 ## Backlog — Stage 3+
 - Stage 3: analyze command (semantic gap analysis)

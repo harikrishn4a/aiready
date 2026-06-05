@@ -43,71 +43,60 @@ export interface RemediationPlan {
 
 const MAX_LINES = 300;
 
-const GENERATE_ITEMS: Record<Subsystem, RemediationItem> = {
+// Canonical harness artifact names — these can be IMPROVED when weak
+const CANONICAL_NAMES = new Set([
+  'AGENTS.md', 'CLAUDE.md', 'AGENT.md',
+  '.cursorrules', '.windsurfrules', '.github/copilot-instructions.md',
+  'PROGRESS.md', 'STATUS.md', 'TODO.md',
+  'ARCHITECTURE.md', 'STRUCTURE.md',
+  'CONSTRAINTS.md', 'RULES.md',
+  'DECISIONS.md',
+  'SESSION-HANDOFF.md', 'HANDOFF.md',
+  'TASK.md',
+]);
+
+// plan.md is an AIReady internal file — never a generate/improve target
+function isPlanFile(file: string): boolean {
+  return file === 'plan.md' || file === '.aiready/plan.md' || file.endsWith('/.aiready/plan.md');
+}
+
+interface ArtifactDef {
+  filename: string;
+  template: string;
+  required: string;
+  defaultSources: string[];
+}
+
+const ARTIFACT_BY_SUBSYSTEM: Record<Subsystem, ArtifactDef> = {
   identity: {
     filename: 'AGENTS.md',
-    subsystem: 'identity',
     template: 'examples/agents.md',
-    required_sections: [
-      'project description',
-      'stack with versions',
-      'verification commands',
-      'repo structure',
-      'session protocol',
-      'constraints reference',
-    ],
-    source_signals: ['README.md', 'package.json', 'src/ directory structure'],
-    max_lines: MAX_LINES,
+    required: 'project description, stack with versions, verification commands, repo structure',
+    defaultSources: ['README.md', 'package.json'],
   },
   verification: {
-    filename: 'scripts/verify.sh + Makefile',
-    subsystem: 'verification',
-    template: 'examples/scripts/verify.sh + examples/Makefile',
-    required_sections: [
-      'runnable build/test/lint commands',
-      'single canonical verification path',
-      'definition of done',
-    ],
-    source_signals: ['package.json scripts', 'build config', 'test config'],
-    max_lines: MAX_LINES,
+    filename: 'AGENTS.md',
+    template: 'examples/agents.md',
+    required: 'runnable build/test/lint commands, single canonical verification path',
+    defaultSources: ['package.json'],
   },
   state: {
-    filename: 'PROGRESS.md + SESSION-HANDOFF.md',
-    subsystem: 'state',
-    template: 'examples/progress.md + examples/session-handoff.md',
-    required_sections: [
-      'current build status',
-      'completed/in-progress/blocked tasks',
-      'next best step',
-    ],
-    source_signals: ['git log --oneline -20', 'existing task files', 'recent commits'],
-    max_lines: MAX_LINES,
+    filename: 'PROGRESS.md',
+    template: 'examples/progress.md',
+    required: 'current build status, completed/in-progress/blocked tasks, next best step',
+    defaultSources: ['package.json'],
   },
   memory: {
     filename: 'ARCHITECTURE.md',
-    subsystem: 'memory',
     template: 'examples/architecture.md',
-    required_sections: [
-      'module map',
-      'module responsibilities',
-      'key files',
-      'data flow',
-      'dependency relationships',
-    ],
-    source_signals: ['src/ directory structure', 'existing docs', 'imports and module boundaries'],
-    max_lines: MAX_LINES,
+    required: 'module map, module responsibilities, data flow',
+    defaultSources: ['package.json'],
   },
   constraints: {
     filename: 'CONSTRAINTS.md',
-    subsystem: 'constraints',
     template: 'examples/constraints.md',
-    required_sections: [
-      'MUST/MUST NOT language',
-      'forbidden actions',
-      'domain-specific rules',
-    ],
-    source_signals: ['codebase patterns', 'auth setup', 'filesystem access patterns'],
-    max_lines: MAX_LINES,
+    required: 'MUST/MUST NOT language, forbidden actions, domain-specific rules',
+    defaultSources: ['package.json'],
   },
 };
 
@@ -127,34 +116,35 @@ const TEMPLATE_SECTION_BY_SUBSYSTEM: Record<Subsystem, string> = {
   constraints: 'examples/constraints.md → MUST / MUST NOT rules',
 };
 
-const CANONICAL_BY_SUBSYSTEM: Record<Subsystem, RegExp> = {
-  identity: /^(AGENTS|CLAUDE|AGENT)\.md$|^\.cursorrules$|^\.windsurfrules$|^\.github\/copilot-instructions\.md$/i,
-  verification: /^(AGENTS|CLAUDE|Makefile)\.md$|^scripts\/verify\.sh$|^Makefile$/i,
-  state: /^(PROGRESS|STATUS|TODO|SESSION-HANDOFF|HANDOFF)\.md$/i,
-  memory: /^(ARCHITECTURE|STRUCTURE)\.md$/i,
-  constraints: /^(CONSTRAINTS|RULES|AGENTS|CLAUDE)\.md$|^\.cursorrules$|^\.windsurfrules$/i,
-};
-
-function cloneGenerateItem(subsystem: Subsystem): RemediationItem {
-  const item = GENERATE_ITEMS[subsystem];
+function makeGenerateItem(subsystem: Subsystem, sourceFiles: string[]): RemediationItem {
+  const def = ARTIFACT_BY_SUBSYSTEM[subsystem];
   return {
-    ...item,
-    required_sections: [...item.required_sections],
-    source_signals: [...item.source_signals],
+    filename: def.filename,
+    subsystem,
+    template: def.template,
+    required_sections: def.required.split(', '),
+    source_signals: def.defaultSources,
+    max_lines: MAX_LINES,
+    use_as_sources: sourceFiles,
+    write_policy: [
+      'create only if missing',
+      'do not overwrite an existing user file without --force',
+      `keep artifact under ${MAX_LINES} lines`,
+    ],
   };
 }
 
-function firstMissing(data: SubsystemScore): string {
-  return data.gaps[0] ?? 'score below threshold for this subsystem';
-}
-
 function buildImproveItem(subsystem: Subsystem, data: SubsystemScore): ImproveItem {
-  const base = cloneGenerateItem(subsystem);
-  const filename = data.files[0] ?? base.filename;
-  const missing = firstMissing(data);
+  const def = ARTIFACT_BY_SUBSYSTEM[subsystem];
+  const filename = data.files[0] ?? def.filename;
+  const missing = data.gaps[0] ?? 'score below threshold';
   return {
-    ...base,
     filename,
+    subsystem,
+    template: def.template,
+    required_sections: def.required.split(', '),
+    source_signals: def.defaultSources,
+    max_lines: MAX_LINES,
     score: data.score,
     findings: data.findings.map((f) => `${f.type}: ${f.message}`),
     why: `Existing ${SECTION_BY_SUBSYSTEM[subsystem]} scored ${data.score}/100.`,
@@ -166,22 +156,9 @@ function buildImproveItem(subsystem: Subsystem, data: SubsystemScore): ImproveIt
     ],
     section: SECTION_BY_SUBSYSTEM[subsystem],
     missing,
-    fix: `Update ${SECTION_BY_SUBSYSTEM[subsystem]} using ${base.template}; keep the artifact under ${MAX_LINES} lines.`,
+    fix: `Update ${SECTION_BY_SUBSYSTEM[subsystem]} using ${def.template}; keep the artifact under ${MAX_LINES} lines.`,
     template_section: TEMPLATE_SECTION_BY_SUBSYSTEM[subsystem],
   };
-}
-
-function buildSourceContextItems(subsystem: Subsystem, data: SubsystemScore): ManualReviewItem[] {
-  if (data.score >= 60) return [];
-  return data.files
-    .filter((file) => !CANONICAL_BY_SUBSYSTEM[subsystem].test(file))
-    .map((path) => ({
-      path,
-      subsystem,
-      score: data.score,
-      reason: 'Useful context was found outside a canonical harness artifact.',
-      suggestion: `Use as source context only. Extract durable facts into ${GENERATE_ITEMS[subsystem].filename}; do not delete, rename, or overwrite this file automatically.`,
-    }));
 }
 
 export function buildRemediationPlan(scored: ScoredResult, target: string): RemediationPlan {
@@ -191,21 +168,32 @@ export function buildRemediationPlan(scored: ScoredResult, target: string): Reme
 
   for (const subsystem of ['identity', 'verification', 'state', 'memory', 'constraints'] as const) {
     const data = scored[subsystem];
+
     if (data.files.length === 0) {
-      const item = cloneGenerateItem(subsystem);
-      generate.push({
-        ...item,
-        why: `No file was mapped to the ${subsystem} subsystem.`,
-        use_as_sources: [],
-        write_policy: [
-          'create only if missing',
-          'do not overwrite an existing user file without --force',
-          `keep artifact under ${MAX_LINES} lines`,
-        ],
-      });
-    } else if (data.score < 60) {
-      improve.push(buildImproveItem(subsystem, data));
-      source_context.push(...buildSourceContextItems(subsystem, data));
+      generate.push(makeGenerateItem(subsystem, ARTIFACT_BY_SUBSYSTEM[subsystem].defaultSources));
+      continue;
+    }
+
+    if (data.score < 60) {
+      const canonical = data.files.filter((f) => CANONICAL_NAMES.has(f) && !isPlanFile(f));
+      const nonCanonical = data.files.filter((f) => !CANONICAL_NAMES.has(f) && !isPlanFile(f));
+      const planFiles = data.files.filter((f) => isPlanFile(f));
+
+      if (canonical.length > 0) {
+        improve.push(buildImproveItem(subsystem, { ...data, files: canonical }));
+      } else if (nonCanonical.length > 0) {
+        generate.push(makeGenerateItem(subsystem, [...nonCanonical, 'package.json']));
+      }
+
+      for (const file of [...nonCanonical, ...planFiles]) {
+        source_context.push({
+          path: file,
+          subsystem,
+          score: data.score,
+          reason: 'Useful context was found outside a canonical harness artifact.',
+          suggestion: `Use as source context only. Extract durable facts into ${ARTIFACT_BY_SUBSYSTEM[subsystem].filename}.`,
+        });
+      }
     }
   }
 
@@ -219,10 +207,6 @@ export function buildRemediationPlan(scored: ScoredResult, target: string): Reme
   };
 }
 
-function list(values: string[]): string {
-  return values.join(', ');
-}
-
 export function renderRemediationMarkdown(plan: RemediationPlan): string {
   const lines: string[] = [];
   lines.push('# AIReady Plan');
@@ -230,72 +214,48 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
   lines.push(`Target: ${plan.target}`);
   lines.push(`Overall: ${plan.overall}/100`);
   lines.push('');
-  lines.push('## Summary');
-  lines.push(`- Missing: ${plan.generate.map((i) => i.filename).join(', ') || 'none'}`);
-  lines.push(`- Weak: ${plan.improve.map((i) => i.filename).join(', ') || 'none'}`);
-  lines.push(`- Source context: ${plan.source_context.map((i) => i.path).join(', ') || 'none'}`);
-  lines.push('');
 
-  if (plan.generate.length > 0) {
-    lines.push('## Missing Artifacts');
+  lines.push('## GENERATE');
+  if (plan.generate.length === 0) {
+    lines.push('(none)');
+  } else {
     for (const item of plan.generate) {
       lines.push(`### ${item.filename}`);
-      if (item.why) lines.push(`- why: ${item.why}`);
-      lines.push(`- template: ${item.template}`);
       lines.push(`- subsystem: ${item.subsystem}`);
-      lines.push(`- max_lines: ${item.max_lines}`);
-      lines.push(`- required_sections: ${list(item.required_sections)}`);
-      lines.push(`- source_signals: ${list(item.source_signals)}`);
-      if (item.write_policy && item.write_policy.length > 0) {
-        lines.push('- write_policy:');
-        for (const policy of item.write_policy) {
-          lines.push(`  - ${policy}`);
-        }
-      }
+      lines.push(`- template: ${item.template}`);
+      const srcFiles = item.use_as_sources?.length ? item.use_as_sources : item.source_signals;
+      lines.push(`- source_files: ${srcFiles.join(', ')}`);
+      lines.push(`- required: ${item.required_sections.join(', ')}`);
       lines.push('');
     }
   }
+  lines.push('');
 
-  if (plan.improve.length > 0) {
-    lines.push('## Weak Artifacts');
+  lines.push('## IMPROVE');
+  if (plan.improve.length === 0) {
+    lines.push('(none)');
+  } else {
     for (const item of plan.improve) {
       lines.push(`### ${item.filename}`);
       lines.push(`- subsystem: ${item.subsystem}`);
-      lines.push(`- score: ${item.score ?? 0}`);
-      if (item.why) lines.push(`- why: ${item.why}`);
-      lines.push(`- max_lines: ${item.max_lines}`);
+      lines.push(`- section: ${item.section}`);
       lines.push(`- missing: ${item.missing}`);
       lines.push(`- fix: ${item.fix}`);
-      lines.push(`- template_section: ${item.template_section}`);
-      if (item.use_as_sources && item.use_as_sources.length > 0) {
-        lines.push(`- use_as_sources: ${list(item.use_as_sources)}`);
-      }
-      if (item.write_policy && item.write_policy.length > 0) {
-        lines.push('- write_policy:');
-        for (const policy of item.write_policy) {
-          lines.push(`  - ${policy}`);
-        }
-      }
-      if (item.findings && item.findings.length > 0) {
-        lines.push('- findings:');
-        for (const finding of item.findings) {
-          lines.push(`  - ${finding}`);
-        }
-      }
+      const srcFiles = item.use_as_sources ?? [];
+      if (srcFiles.length > 0) lines.push(`- source_files: ${srcFiles.join(', ')}`);
       lines.push('');
     }
   }
+  lines.push('');
 
-  if (plan.source_context.length > 0) {
-    lines.push('## Source Context To Review');
-    lines.push('These files may contain useful context, but should not be treated as canonical harness artifacts.');
-    lines.push('');
+  lines.push('## SOURCE CONTEXT');
+  if (plan.source_context.length === 0) {
+    lines.push('(none)');
+  } else {
     for (const item of plan.source_context) {
       lines.push(`### ${item.path}`);
       lines.push(`- subsystem: ${item.subsystem}`);
-      lines.push(`- score: ${item.score}`);
       lines.push(`- reason: ${item.reason}`);
-      lines.push(`- suggestion: ${item.suggestion}`);
       lines.push('');
     }
   }

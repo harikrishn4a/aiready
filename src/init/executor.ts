@@ -31,8 +31,8 @@ export async function executeGenerate(
 
   console.log(`${label} Generating ${item.filename}`);
   console.log(`      Subsystem: ${item.subsystem}`);
-  if (item.sourceSignals.length > 0) {
-    console.log(`      Sources: ${item.sourceSignals.join(', ')}`);
+  if (item.sourceFiles.length > 0) {
+    console.log(`      Sources: ${item.sourceFiles.join(', ')}`);
   }
   console.log(`      Template: ${item.templateFile}`);
 

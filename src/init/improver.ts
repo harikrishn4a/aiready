@@ -3,9 +3,9 @@ import { join } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import type { ImproveItem } from './parser.js';
 
-const SYSTEM_PROMPT = `You are improving a specific section of an existing harness artifact.
-Make only the requested change. Do not modify other sections.
-Output the complete updated file content.`;
+const SYSTEM_PROMPT = `You are improving one specific section of an existing harness artifact.
+Make only the requested change. Do not modify any other section.
+Output the complete updated file content only, no explanation.`;
 
 function readCapped(filePath: string, cap = 4000): string | null {
   if (!existsSync(filePath)) return null;
@@ -17,6 +17,7 @@ export async function improveArtifact(
   target: string,
   provider: LLMProvider,
 ): Promise<string> {
+  // Always read fresh from disk — captures any edits from previous improve calls
   const filePath = join(target, item.filename);
   const currentContent = readFileSync(filePath, 'utf-8');
 
@@ -27,8 +28,8 @@ export async function improveArtifact(
   }
 
   const userParts = [
-    `Improve the ${item.section} section of ${item.filename}.`,
-    '',
+    `File: ${item.filename}`,
+    `Section to fix: ${item.section}`,
     `What is missing: ${item.missing}`,
     `How to fix it: ${item.fix}`,
     '',
@@ -39,8 +40,8 @@ export async function improveArtifact(
   }
   userParts.push(
     '',
-    `Output the complete updated file with only the ${item.section} section changed. Do not modify any other section.`,
+    `Output the complete updated ${item.filename} with only the ${item.section} section changed.`,
   );
 
-  return provider.chat(SYSTEM_PROMPT, userParts.join('\n'));
+  return provider.chat(SYSTEM_PROMPT, userParts.join('\n'), { fast: false });
 }

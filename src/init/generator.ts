@@ -6,15 +6,15 @@ import type { GenerateItem } from './parser.js';
 const PACKAGE_ROOT = resolve(__dirname, '..');
 
 const SYSTEM_PROMPT = `You are generating a harness artifact for an AI coding agent.
-Your output will be saved directly to disk and read by AI agents in future sessions.
+This file will be read by agents in future sessions to guide their work.
 
 Rules:
 - Follow the template structure exactly
-- Fill in all {{PLACEHOLDER}} sections with real content from sources
-- Do not include placeholder text in output
-- Keep the artifact focused and under 300 lines
-- Use specific facts from source files, not generic descriptions
-- Output only the file content, no explanation or commentary`;
+- Replace all {{PLACEHOLDER}} sections with real content from sources
+- Never output placeholder text
+- Keep output under 300 lines
+- Be specific — use real names, real commands, real module names from sources
+- Output the file content only, no explanation, no markdown fences`;
 
 function readCapped(filePath: string, cap = 4000): string | null {
   if (!existsSync(filePath)) return null;
@@ -33,51 +33,29 @@ function loadTemplate(templateFile: string): string {
   return '';
 }
 
-function looksLikeFilePath(signal: string): boolean {
-  return !signal.includes(' ') && !signal.endsWith('/');
-}
-
-function gatherSourceContext(item: GenerateItem, target: string): string {
-  const parts: string[] = [];
-
-  const pkgPath = join(target, 'package.json');
-  const pkg = readCapped(pkgPath);
-  if (pkg) parts.push(`### package.json\n${pkg}`);
-
-  for (const signal of item.sourceSignals) {
-    if (!looksLikeFilePath(signal)) continue;
-    if (signal === 'package.json') continue;
-    const content = readCapped(join(target, signal));
-    if (content) parts.push(`### ${signal}\n${content}`);
-  }
-
-  return parts.join('\n\n');
-}
-
 export async function generateArtifact(
   item: GenerateItem,
   target: string,
   provider: LLMProvider,
 ): Promise<string> {
   const template = loadTemplate(item.templateFile);
-  const sourceContext = gatherSourceContext(item, target);
 
-  const userParts = [
-    `Generate ${item.filename} for this repository.`,
-    '',
-  ];
-  if (item.required) {
-    userParts.push(`Required sections:\n${item.required}`, '');
-  }
-  if (template) {
-    userParts.push(`Template to follow:\n${template}`, '');
-  }
-  if (sourceContext) {
-    userParts.push(`Source context (use these to fill in real content):\n${sourceContext}`, '');
-  }
-  if (item.writePolicy.length > 0) {
-    userParts.push(`Write policy:\n${item.writePolicy.join('\n')}`);
-  }
+  const sourceParts: string[] = [];
+  const pkgPath = join(target, 'package.json');
+  const pkg = readCapped(pkgPath);
+  if (pkg) sourceParts.push(`### package.json\n${pkg}`);
 
-  return provider.chat(SYSTEM_PROMPT, userParts.join('\n'));
+  for (const sourceFile of item.sourceFiles) {
+    if (sourceFile === 'package.json') continue;
+    const content = readCapped(join(target, sourceFile));
+    if (content) sourceParts.push(`### ${sourceFile}\n${content}`);
+  }
+  const sourceContext = sourceParts.join('\n\n');
+
+  const userParts = [`Generate ${item.filename} for this repository.\n`];
+  if (item.required) userParts.push(`Required sections:\n${item.required}\n`);
+  if (template) userParts.push(`Template:\n${template}\n`);
+  if (sourceContext) userParts.push(`Source context:\n${sourceContext}`);
+
+  return provider.chat(SYSTEM_PROMPT, userParts.join('\n'), { fast: false });
 }

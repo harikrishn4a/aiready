@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, existsSync, readFileSync } from 'fs';
+import { mkdtempSync, writeFileSync, rmSync, existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { executeGenerate, executeImprove, type InitFlags } from '../src/init/executor';
@@ -28,8 +28,7 @@ const BASE_GENERATE: GenerateItem = {
   subsystem: 'state',
   required: 'current state, completed items',
   templateFile: 'examples/progress.md',
-  sourceSignals: ['package.json'],
-  writePolicy: ['create only if missing'],
+  sourceFiles: ['package.json'],
 };
 
 const BASE_IMPROVE: ImproveItem = {
@@ -38,17 +37,13 @@ const BASE_IMPROVE: ImproveItem = {
   section: 'verification section',
   missing: 'no commands',
   fix: 'add verification commands',
-  templateSection: 'examples/agents.md → Verification Commands',
   sourceFiles: [],
-  writePolicy: [],
-  findings: [],
 };
 
 describe('executeGenerate', () => {
   it('writes new file when it does not exist', async () => {
     const provider = mockProvider('# PROGRESS\n\ncontent');
-    const flags: InitFlags = {};
-    await executeGenerate(BASE_GENERATE, tmp, flags, 1, 1, provider);
+    await executeGenerate(BASE_GENERATE, tmp, {}, 1, 1, provider);
     expect(existsSync(join(tmp, 'PROGRESS.md'))).toBe(true);
     expect(readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8')).toBe('# PROGRESS\n\ncontent');
   });
@@ -56,8 +51,7 @@ describe('executeGenerate', () => {
   it('skips existing file without --force', async () => {
     writeFileSync(join(tmp, 'PROGRESS.md'), '# existing');
     const provider = mockProvider();
-    const flags: InitFlags = {};
-    await executeGenerate(BASE_GENERATE, tmp, flags, 1, 1, provider);
+    await executeGenerate(BASE_GENERATE, tmp, {}, 1, 1, provider);
     expect(provider.chat).not.toHaveBeenCalled();
     expect(readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8')).toBe('# existing');
   });
@@ -65,8 +59,7 @@ describe('executeGenerate', () => {
   it('overwrites existing file with --force true', async () => {
     writeFileSync(join(tmp, 'PROGRESS.md'), '# existing');
     const provider = mockProvider('# new content');
-    const flags: InitFlags = { force: true };
-    await executeGenerate(BASE_GENERATE, tmp, flags, 1, 1, provider);
+    await executeGenerate(BASE_GENERATE, tmp, { force: true }, 1, 1, provider);
     expect(provider.chat).toHaveBeenCalled();
     expect(readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8')).toBe('# new content');
   });
@@ -74,16 +67,14 @@ describe('executeGenerate', () => {
   it('overwrites with --force matching filename', async () => {
     writeFileSync(join(tmp, 'PROGRESS.md'), '# existing');
     const provider = mockProvider('# new content');
-    const flags: InitFlags = { force: 'PROGRESS.md' };
-    await executeGenerate(BASE_GENERATE, tmp, flags, 1, 1, provider);
+    await executeGenerate(BASE_GENERATE, tmp, { force: 'PROGRESS.md' }, 1, 1, provider);
     expect(provider.chat).toHaveBeenCalled();
   });
 
   it('does not overwrite with --force for different filename', async () => {
     writeFileSync(join(tmp, 'PROGRESS.md'), '# existing');
     const provider = mockProvider();
-    const flags: InitFlags = { force: 'CONSTRAINTS.md' };
-    await executeGenerate(BASE_GENERATE, tmp, flags, 1, 1, provider);
+    await executeGenerate(BASE_GENERATE, tmp, { force: 'CONSTRAINTS.md' }, 1, 1, provider);
     expect(provider.chat).not.toHaveBeenCalled();
   });
 
@@ -92,6 +83,13 @@ describe('executeGenerate', () => {
     const provider = mockProvider('# content');
     await executeGenerate(item, tmp, {}, 1, 1, provider);
     expect(existsSync(join(tmp, 'docs', 'PROGRESS.md'))).toBe(true);
+  });
+
+  it('calls provider with fast: false for quality output', async () => {
+    const provider = mockProvider('# content');
+    await executeGenerate(BASE_GENERATE, tmp, {}, 1, 1, provider);
+    const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[2]).toMatchObject({ fast: false });
   });
 });
 
@@ -116,5 +114,24 @@ describe('executeImprove', () => {
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 1, provider);
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[1]).toContain('# original content to improve');
+  });
+
+  it('reads file fresh from disk on each call', async () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# v1');
+    const provider = mockProvider('# v2');
+    await executeImprove(BASE_IMPROVE, tmp, {}, 1, 2, provider);
+    // Simulate external edit between calls
+    writeFileSync(join(tmp, 'AGENTS.md'), '# v2 modified externally');
+    await executeImprove(BASE_IMPROVE, tmp, {}, 2, 2, provider);
+    const secondCall = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[1];
+    expect(secondCall[1]).toContain('# v2 modified externally');
+  });
+
+  it('calls provider with fast: false', async () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '# original');
+    const provider = mockProvider('# improved');
+    await executeImprove(BASE_IMPROVE, tmp, {}, 1, 1, provider);
+    const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[2]).toMatchObject({ fast: false });
   });
 });
