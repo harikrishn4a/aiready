@@ -47,10 +47,21 @@ const BASE_IMPROVE: ArtifactPlan = {
 
 describe('executeGenerate', () => {
   it('writes new file when it does not exist', async () => {
-    const provider = mockProvider('# PROGRESS\n\ncontent');
+    const lines = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join('\n');
+    const provider = mockProvider(`# PROGRESS\n\n${lines}`);
     await executeGenerate(BASE_GENERATE, tmp, {}, 1, 1, provider);
     expect(existsSync(join(tmp, 'PROGRESS.md'))).toBe(true);
-    expect(readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8')).toBe('# PROGRESS\n\ncontent');
+    const written = readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8');
+    expect(written.split('\n').length).toBeGreaterThan(10);
+  });
+
+  it('strips markdown fences from LLM output before writing', async () => {
+    const body = Array.from({ length: 12 }, (_, i) => `line ${i + 1}`).join('\n');
+    const provider = mockProvider(`\`\`\`markdown\n# PROGRESS\n\n${body}\n\`\`\``);
+    await executeGenerate(BASE_GENERATE, tmp, {}, 1, 1, provider);
+    const written = readFileSync(join(tmp, 'PROGRESS.md'), 'utf-8');
+    expect(written).not.toContain('```');
+    expect(written.split('\n').length).toBeGreaterThan(10);
   });
 
   it('skips existing file without --force', async () => {
@@ -148,5 +159,22 @@ describe('executeImprove', () => {
     await executeImprove(BASE_IMPROVE, tmp, {}, 1, 1, provider);
     const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
     expect(call[2]).toMatchObject({ fast: false });
+  });
+
+  it('uses generate path when improving an empty file', async () => {
+    writeFileSync(join(tmp, 'AGENTS.md'), '');
+    writeFileSync(join(tmp, 'package.json'), '{"name":"test"}');
+    const lines = Array.from({ length: 12 }, (_, i) => `section ${i + 1}`).join('\n');
+    const provider = mockProvider(`# AGENTS\n\n${lines}`);
+    const artifact: ArtifactPlan = {
+      ...BASE_IMPROVE,
+      templateFile: 'examples/agents.md',
+      sourceFiles: ['package.json'],
+    };
+    await executeImprove(artifact, tmp, {}, 1, 1, provider);
+    const written = readFileSync(join(tmp, 'AGENTS.md'), 'utf-8');
+    expect(written.split('\n').length).toBeGreaterThan(10);
+    const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[1]).toContain('TEMPLATE START');
   });
 });

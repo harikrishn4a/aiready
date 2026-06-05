@@ -161,6 +161,11 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
     }
   }
 
+  const initContext = {
+    subsystemSources: plan.subsystemSources,
+    sourceContext: plan.sourceContext,
+  };
+
   let step = 0;
   for (const artifact of plan.artifacts) {
     const forced = isForced(flags, artifact.filename);
@@ -170,9 +175,9 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
     const action = forced && artifact.action === 'skip' ? 'generate' : artifact.action;
 
     if (action === 'generate') {
-      await executeGenerate(artifact, targetDir, flags, step, actionCount, provider);
+      await executeGenerate(artifact, targetDir, flags, step, actionCount, provider, initContext);
     } else if (action === 'improve') {
-      await executeImprove(artifact, targetDir, flags, step, actionCount, provider);
+      await executeImprove(artifact, targetDir, flags, step, actionCount, provider, initContext);
     }
   }
 

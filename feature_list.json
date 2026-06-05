@@ -432,7 +432,32 @@
         "npm test: 207/207 (16 test files: +init-planner 12 tests, +init-consolidator 6 tests)",
         "node dist/cli.js init --target ./examples/bare-repo --dry-run: shows all 13 canonical artifacts with source context"
       ],
-      "agent_notes": "planner.ts: reads SUBSYSTEM SCORES + SUBSYSTEM SOURCES from plan.md; for each of 13 canonical artifacts decides skip (score>=80 and exists), improve (score<80 and exists), generate (doesn't exist); alwaysGenerate=true for TASK.md/features.md/feature_list.json/QUALITY.md (never skipped). generator.ts: strict template adherence prompt, detectTechStack(), blank template copy without LLM for alwaysGenerate files. improver.ts: accepts ArtifactPlan. consolidator.ts: extracts unique content from CLAUDE.md/.cursorrules etc. into AGENTS.md, writes shims. remediation.ts: now writes ## SUBSYSTEM SCORES and ## SUBSYSTEM SOURCES to plan.md. scorer.ts: new getAuditScoreDetailed() returns per-subsystem scores. index.ts: full pipeline with plan preview, confirmation prompt (--yes to skip), consolidation, per-subsystem score delta.",
+      "agent_notes": "Superseded by feat-017 for planner decision logic. planner.ts previously re-decided all 13 artifacts from subsystem scores; feat-017 makes planner a pure parser of plan.md GENERATE/IMPROVE/SKIP sections.",
+      "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-017",
+      "priority": 17,
+      "area": "init",
+      "title": "Init plan contract, graphify context, full LLM writes",
+      "user_visible_behavior": "npx aiready init executes plan.md GENERATE/IMPROVE/SKIP exactly (no 12-artifact re-decision when GENERATE is none); strips LLM code fences before write; empty improve stubs use generate path; always injects graphify context when graphify-out exists; expands thin source_files from SOURCE CONTEXT + graphify",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test",
+        "node dist/cli.js init --target <betterworld> --dry-run"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js 88.27 KB, zero errors",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 237/237 (19 test files)",
+        "node dist/cli.js init --target betterworld --dry-run: 8 IMPROVE, 5 SKIP, 0 GENERATE (matches plan.md)"
+      ],
+      "agent_notes": "output.ts: cleanLLMOutput(). parser.ts: parse GENERATE/IMPROVE/SKIP/SOURCE CONTEXT. planner.ts: pure parser — no CANONICAL_ARTIFACTS loop. context.ts: sourcesAreThin(), resolveArtifactSources() with graphify always-on + thin expansion from SOURCE CONTEXT. graphify.ts: shared findGraphifyOutput/rankGraphifyFiles for audit loader and init. executor.ts: cleanLLMOutput before write; empty improve → generateArtifact. Tests: betterworld-mini graphify fixture, init-context.test.ts, init-output.test.ts.",
       "last_updated": "2026-06-05"
     }
   ]

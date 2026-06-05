@@ -2,11 +2,11 @@
 
 ## Current state
 - Build: passing — dist/cli.js 82.71 KB (full pipeline + Stage 2 bundled)
-- Tests: 228/228 passing (17 test files)
+- Tests: 237/237 passing (19 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-05
-- Active feature: none — **feat-016 complete**
+- Active feature: none — **feat-017 complete**
 
 ## Completed
 - [x] Product design and stage definitions
@@ -26,7 +26,7 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-016 complete
+- nothing — feat-017 complete
 
 ## Blocked
 - nothing

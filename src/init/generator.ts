@@ -3,6 +3,13 @@ import { readFile } from 'fs/promises';
 import { resolve, join } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import type { ArtifactPlan } from './planner.js';
+import type { SourceContextEntry } from './context.js';
+import { resolveArtifactSources, formatGraphifyContext } from './context.js';
+
+export interface InitContext {
+  subsystemSources: Record<string, string[]>;
+  sourceContext: SourceContextEntry[];
+}
 
 const PACKAGE_ROOT = resolve(__dirname, '..');
 
@@ -75,6 +82,7 @@ export async function generateArtifact(
   artifact: ArtifactPlan,
   target: string,
   provider: LLMProvider,
+  initContext?: InitContext,
 ): Promise<string> {
   // Blank templates: copy directly without LLM call
   if (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename)) {
@@ -84,17 +92,26 @@ export async function generateArtifact(
 
   const template = loadTemplate(artifact.templateFile);
 
+  const resolved = resolveArtifactSources(
+    target,
+    artifact.subsystem,
+    artifact.sourceFiles,
+    initContext?.subsystemSources ?? {},
+    initContext?.sourceContext ?? [],
+  );
+
   const sourceParts: string[] = [];
-  // Always include package.json for context if it exists
   const pkgContent = readCapped(join(target, 'package.json'));
-  if (pkgContent && !artifact.sourceFiles.includes('package.json')) {
+  if (pkgContent && !resolved.sourceFiles.includes('package.json')) {
     sourceParts.push(`### package.json\n${pkgContent}`);
   }
 
-  for (const sourceFile of artifact.sourceFiles) {
+  for (const sourceFile of resolved.sourceFiles) {
     const content = readCapped(join(target, sourceFile));
     if (content) sourceParts.push(`### ${sourceFile}\n${content}`);
   }
+
+  const graphifyBlock = formatGraphifyContext(resolved.graphifyContext, artifact.subsystem);
 
   const techStackSummary = await detectTechStack(target);
 
@@ -105,6 +122,10 @@ export async function generateArtifact(
 
   if (sourceParts.length > 0) {
     userParts.push(`Extract relevant information from these source files to fill in each section of the template:\n\n${sourceParts.join('\n\n')}\n`);
+  }
+
+  if (graphifyBlock) {
+    userParts.push(`${graphifyBlock}\n`);
   }
 
   if (techStackSummary) {

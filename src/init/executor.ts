@@ -1,9 +1,10 @@
-import { existsSync, mkdirSync, writeFileSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs';
 import { join, dirname } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import type { ArtifactPlan } from './planner.js';
-import { generateArtifact } from './generator.js';
+import { generateArtifact, type InitContext } from './generator.js';
 import { improveArtifact } from './improver.js';
+import { cleanLLMOutput } from './output.js';
 
 export interface InitFlags {
   provider?: string;
@@ -26,6 +27,7 @@ export async function executeGenerate(
   step: number,
   total: number,
   provider: LLMProvider,
+  initContext?: InitContext,
 ): Promise<void> {
   const filePath = join(target, artifact.filename);
   const label = `[${step}/${total}]`;
@@ -44,7 +46,7 @@ export async function executeGenerate(
     return;
   }
 
-  const content = await generateArtifact(artifact, target, provider);
+  const content = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
   mkdirSync(dirname(filePath), { recursive: true });
   writeFileSync(filePath, content, 'utf-8');
   const lines = content.split('\n').length;
@@ -58,6 +60,7 @@ export async function executeImprove(
   step: number,
   total: number,
   provider: LLMProvider,
+  initContext?: InitContext,
 ): Promise<void> {
   const filePath = join(target, artifact.filename);
   const label = `[${step}/${total}]`;
@@ -70,7 +73,14 @@ export async function executeImprove(
     return;
   }
 
-  const updatedContent = await improveArtifact(artifact, target, provider);
+  const currentContent = readFileSync(filePath, 'utf-8');
+  let updatedContent: string;
+  if (currentContent.trim().length === 0) {
+    console.log(`      Empty file — using generate path`);
+    updatedContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
+  } else {
+    updatedContent = cleanLLMOutput(await improveArtifact(artifact, target, provider, initContext));
+  }
   writeFileSync(filePath, updatedContent, 'utf-8');
   console.log(`      ✓ Patched\n`);
 }

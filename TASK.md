@@ -1,31 +1,32 @@
-# TASK.md — audit plan source cleanup
+# TASK.md — Sprint Contract
 
-## Feature ID
-feat-016
+## Feature: feat-017 — Init plan contract + graphify context + full writes
 
-## Scope — what will change
-- UPDATED `src/audit/remediation.ts` — dedupe SOURCE CONTEXT by path, prefer non-empty source files for IMPROVE items, and keep state artifact fixes file-specific
-- UPDATED `tests/remediation.test.ts` — regression coverage for source-context dedupe, useful source selection, and distinct PROGRESS.md / SESSION-HANDOFF.md fix text
+## Goal
+Init must execute `.aiready/plan.md` exactly (no planner re-decisions), write full LLM output (strip fences), treat empty improve targets as generate, and use Graphify context with thin-source expansion.
 
-## Problems being fixed
-1. `plan.md` can appear multiple times in SOURCE CONTEXT when it maps to multiple subsystems
-2. IMPROVE `source_files` can point only to empty canonical artifacts instead of non-empty source context
-3. PROGRESS.md and SESSION-HANDOFF.md can receive misleading shared state-subsystem missing/fix text
+## Scope
+- `src/init/output.ts` — `cleanLLMOutput()`
+- `src/init/parser.ts` — parse GENERATE/IMPROVE/SKIP/SOURCE CONTEXT
+- `src/init/planner.ts` — pure parser adapter (no CANONICAL_ARTIFACTS decisions)
+- `src/init/context.ts` — graphify always-on context, thin-source expansion
+- `src/utils/graphify.ts` — shared graphify ranking (audit + init)
+- `src/init/generator.ts`, `improver.ts`, `executor.ts`, `index.ts`
+- Tests with betterworld graphify-mini fixture
 
-## Design decisions
-- SOURCE CONTEXT is grouped by file path and lists all mapped subsystems
-- Empty or missing files are not useful source context
-- Non-empty non-canonical files are preferred for canonical IMPROVE items
-- Init executor changes are explicitly out of scope for this session
+## Out of scope
+- Re-running audit on betterworld (user can do with API key)
+- Writing to betterworld without user confirmation
 
-## Modules (in order)
-1. src/audit/remediation.ts source selection helpers
-2. src/audit/remediation.ts SOURCE CONTEXT grouping/rendering
-3. tests/remediation.test.ts regression coverage
-4. project state docs
+## Verification
+```bash
+npm run build && npm run typecheck && npm run lint && npm test
+node dist/cli.js init --target <betterworld> --dry-run  # 8 IMPROVE, 5 SKIP, 0 GENERATE
+```
 
-## Completion gate
-- npm run build — zero errors
-- npm run typecheck — zero errors
-- npm run lint — clean
-- npm test — all pass
+## Evidence gate
+- [x] cleanLLMOutput strips fences; written files >10 lines in tests
+- [x] planner parses plan only — betterworld dry-run matches plan
+- [x] empty improve → generate path
+- [x] graphify context tests with betterworld-mini fixture
+- [x] 237/237 tests pass

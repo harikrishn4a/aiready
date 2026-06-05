@@ -145,16 +145,17 @@ reporter.ts      Prints multi-line subsystem scores to terminal
 ```
 .aiready/plan.md
     ↓
-read generate / improve lists + source_context files
+parser.ts / planner.ts — parse GENERATE / IMPROVE / SKIP only (no re-decisions)
     ↓
-for each artifact to generate:
-    build prompt from examples/ template + source context
-    LLM generates content (capped at 300 lines)
+for each actionable artifact:
+    resolveArtifactSources() — plan source_files
+      + expand if thin (<500 chars) from SUBSYSTEM SOURCES, SOURCE CONTEXT, graphify
+      + always inject graphify-ranked context when graphify-out/graph.json exists
+    build prompt from examples/ template + resolved sources + graphify context
+    LLM generates or improves (capped at 300 lines)
+    cleanLLMOutput() — strip markdown fences
     write to target repo (skip if exists and --force not passed)
-for each artifact to improve:
-    read existing file + build improvement prompt
-    LLM rewrites weak sections only
-    show diff, write on confirmation
+    empty improve target → generate path (template-based fill)
 ```
 
 **Rules:**

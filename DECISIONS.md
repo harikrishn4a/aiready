@@ -182,3 +182,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Keep every `(path, subsystem)` as a separate SOURCE CONTEXT entry — readable for machines but noisy for humans and redundant for init. Always include canonical target files as sources — misleading when the target file is an empty stub.
 - **Constraints introduced**: `remediation.ts` may read candidate files only to determine whether they contain useful content; it still must not generate or modify harness artifacts beyond writing `.aiready/plan.md`.
 - **Revisit when**: Init executor switches empty improve targets to generation mode.
+
+---
+
+### 2026-06-05: Init executes plan.md and uses Graphify for context
+
+- **Decision**: Stage 2 `planner.ts` parses GENERATE/IMPROVE/SKIP from `.aiready/plan.md` only — no independent canonical artifact decisions. `executor.ts` strips LLM markdown fences before write and routes empty improve targets through the generate path. When `graphify-out/graph.json` exists, init always injects subsystem-ranked graphify context into generate/improve prompts; it expands `source_files` only when plan sources are thin (<500 chars), using SOURCE CONTEXT paths and graphify-ranked markdown files.
+- **Reason**: Audit is the single decision-maker; init was re-deciding 12 generates when plan said GENERATE (none). betterworld repos have rich context in `change_logs/` and `plan.md` indexed by Graphify but not always listed in IMPROVE `source_files`. CLAUDE.md may exist on disk but not appear in graph nodes.
+- **Rejected alternatives**: Planner keeps subsystem-score thresholds — contradicts audit contract. Always replace plan source_files with graphify — overrides audit intent when sources are already rich.
+- **Constraints introduced**: Shared graphify ranking lives in `src/utils/graphify.ts` (audit loader + init context). Init must not write to target repos without user confirmation/`--force`.
+- **Revisit when**: Graphify schema adds richer edge-based ranking or init needs code (non-markdown) context from graph nodes.

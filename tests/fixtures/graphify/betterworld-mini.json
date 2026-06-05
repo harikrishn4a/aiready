@@ -1,0 +1,35 @@
+{
+  "nodes": [
+    {
+      "id": "checkpoint",
+      "label": "Checkpoint 1 Backend Implementation Progress",
+      "file_type": "document",
+      "source_file": "change_logs/CHECKPOINT_1_BACKEND_IMPLEMENTATION.md"
+    },
+    {
+      "id": "workflow",
+      "label": "RAG Workflow for ESG Gap Analysis",
+      "file_type": "document",
+      "source_file": "change_logs/WORKFLOW.md"
+    },
+    {
+      "id": "plan",
+      "label": "Project architecture and constraints overview",
+      "file_type": "document",
+      "source_file": "plan.md"
+    },
+    {
+      "id": "testing_guide",
+      "label": "Testing Guide verification test suite how to run",
+      "file_type": "document",
+      "source_file": "scripts/TESTING_GUIDE.md"
+    },
+    {
+      "id": "constraints_rules",
+      "label": "Coding standards constraints must not rules",
+      "file_type": "document",
+      "source_file": "change_logs/CRITICAL_FIXES_NEEDED.md"
+    }
+  ],
+  "links": []
+}
