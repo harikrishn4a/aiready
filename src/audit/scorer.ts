@@ -194,7 +194,9 @@ function normalizeFindings(entry: LLMScoreEntry): Finding[] {
 // Per-file content budget. Capping per file (not the joined blob) guarantees a
 // dedicated artifact (e.g. docs/CONSTRAINTS.md) is always shown to the scorer even
 // when a large AGENTS.md is also mapped to the same subsystem.
-const PER_FILE_CONTENT_CAP = 6000;
+// Large enough to show a full canonical artifact (~300 lines) to the scorer, so our
+// own generated docs are never seen as "truncated". Bounded further per subsystem below.
+const PER_FILE_CONTENT_CAP = 12000;
 
 // Agent entry files reference everything, so they get mapped broadly. Show the
 // subsystem's dedicated files first so entry-file references never crowd them out.
