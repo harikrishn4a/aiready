@@ -3,13 +3,15 @@ import { Command } from 'commander';
 import { runAudit } from './audit/index.js';
 import { runInit } from './init/index.js';
 import { runGraph } from './graph/index.js';
+import { checkForUpdate } from './utils/update-check.js';
+import pkg from '../package.json';
 
 export const program = new Command();
 
 program
   .name('aiready')
   .description('Audit repositories for AI agent readiness')
-  .version('0.1.0');
+  .version(pkg.version);
 
 program
   .command('graph')
@@ -68,5 +70,6 @@ program
 
 // Parse only when run as CLI entry point, not when imported in tests
 if (require.main === module) {
+  void checkForUpdate(pkg.name, pkg.version);
   program.parse(process.argv);
 }

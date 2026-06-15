@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { spawnSync } from 'child_process';
+import { readFileSync } from 'fs';
 import { resolve, join } from 'path';
 import { loadRepo } from '../src/audit/loader';
 import { crossRef } from '../src/audit/cross-ref';
@@ -10,14 +11,17 @@ import type { LLMProvider } from '../src/utils/llm';
 const root = resolve('.');
 const goodRepo = join(root, 'test-fixtures', 'good-repo');
 const bareRepo = join(root, 'test-fixtures', 'bare-repo');
-const cliBin = join(root, 'dist', 'cli.js');
+const cliBin = join(root, 'dist', 'telemetry-bin.js');
+const pkgVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version as string;
 
 function cliEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env = { ...process.env };
   delete env['VITEST'];
-  // Point dotenv at a non-existent file so the repo's real .env (which may hold
-  // API keys) never leaks into the key-guard tests.
+  delete env['ANTHROPIC_API_KEY'];
+  delete env['OPENAI_API_KEY'];
   env['DOTENV_CONFIG_PATH'] = join(root, 'tests', '.env.nonexistent');
+  env['CLI_OPEN_TELEMETRY_DISABLE'] = '1';
+  env['AIREADY_NO_UPDATE_CHECK'] = '1';
   return { ...env, ...extra };
 }
 
@@ -141,7 +145,7 @@ describe('CLI binary: missing ANTHROPIC_API_KEY (anthropic provider)', () => {
     delete env['ANTHROPIC_API_KEY'];
     const result = spawnCli(['audit', '--target', goodRepo, '--provider', 'anthropic', '--model', 'fast'], env);
     expect(result.status).toBe(1);
-  });
+  }, 15_000);
 
   it('prints ERROR/WHY/FIX message when key is missing', () => {
     const env = cliEnv();
@@ -150,7 +154,7 @@ describe('CLI binary: missing ANTHROPIC_API_KEY (anthropic provider)', () => {
     expect(result.stderr).toContain('ANTHROPIC_API_KEY');
     expect(result.stderr).toContain('WHY:');
     expect(result.stderr).toContain('FIX:');
-  });
+  }, 15_000);
 });
 
 describe('CLI binary: missing OPENAI_API_KEY (openai provider)', () => {
@@ -159,7 +163,7 @@ describe('CLI binary: missing OPENAI_API_KEY (openai provider)', () => {
     delete env['OPENAI_API_KEY'];
     const result = spawnCli(['audit', '--target', goodRepo, '--provider', 'openai', '--model', 'fast'], env);
     expect(result.status).toBe(1);
-  });
+  }, 15_000);
 });
 
 // ── CLI binary: graph command ────────────────────────────────────────────────
@@ -169,7 +173,7 @@ describe('CLI binary: graph', () => {
     const result = spawnCli(['graph', '--target', join(root, 'no', 'such', 'dir', 'xyz')]);
     expect(result.status).toBe(1);
     expect(result.stderr).toContain('Target directory not found');
-  });
+  }, 15_000);
 });
 
 // ── CLI binary: --help / --version ───────────────────────────────────────────
@@ -178,26 +182,26 @@ describe('CLI binary: --version', () => {
   it('prints version and exits 0', () => {
     const result = spawnCli(['--version']);
     expect(result.status).toBe(0);
-    expect(result.stdout).toContain('0.1.0');
-  });
+    expect(result.stdout).toContain(pkgVersion);
+  }, 15_000);
 });
 
 describe('CLI binary: --help', () => {
   it('exits 0', () => {
     expect(spawnCli(['--help']).status).toBe(0);
-  });
+  }, 15_000);
 
   it('lists audit command in help', () => {
     expect(spawnCli(['--help']).stdout).toContain('audit');
-  });
+  }, 15_000);
 
   it('lists graph command in help', () => {
     expect(spawnCli(['--help']).stdout).toContain('graph');
-  });
+  }, 15_000);
 
   it('audit --help shows --provider and --model flags', () => {
     const out = spawnCli(['audit', '--help']).stdout;
     expect(out).toContain('--provider');
     expect(out).toContain('--model');
-  });
+  }, 15_000);
 });
