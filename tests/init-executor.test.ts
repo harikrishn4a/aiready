@@ -187,6 +187,22 @@ describe('executeArtifact — improve', () => {
     expect(call[1]).toContain('=== TEMPLATE ===');
   });
 
+  it('improves a legacy root file and writes the result under docs/', async () => {
+    writeFileSync(join(tmp, 'ARCHITECTURE.md'), '# Legacy architecture at root\nmodule details');
+    const body = multiLine('# ARCHITECTURE');
+    const provider = mockProvider(body);
+    const artifact: ArtifactPlan = {
+      ...BASE_IMPROVE, filename: 'ARCHITECTURE.md', outputPath: 'docs/ARCHITECTURE.md',
+      templateFile: 'examples/architecture.md', subsystem: 'memory',
+    };
+    await executeArtifact(artifact, tmp, {}, 1, 1, provider);
+    expect(provider.chat).toHaveBeenCalled();
+    expect(existsSync(join(tmp, 'docs', 'ARCHITECTURE.md'))).toBe(true);
+    // legacy root content is passed in as the basis for restructuring
+    const call = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0];
+    expect(call[1]).toContain('# Legacy architecture at root');
+  });
+
   it('throws when LLM returns empty content on improve', async () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# original');
     const provider = mockProvider('');

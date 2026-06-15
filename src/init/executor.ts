@@ -88,8 +88,9 @@ export async function executeArtifact(
     return;
   }
 
-  // IMPROVE skip semantics: nothing to improve if the file is absent.
-  if (artifact.action === 'improve' && !fileExists) {
+  // IMPROVE skip semantics: nothing to improve if the file is absent at both
+  // the output path and a legacy root path (root copy is restructured into docs/).
+  if (artifact.action === 'improve' && !fileExists && !existsSync(legacyRootPath)) {
     console.log(`      ⊜ Skipped — file does not exist\n`);
     return;
   }

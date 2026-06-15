@@ -5,6 +5,32 @@ import { loadTemplate, assertTemplateLoaded } from './generator.js';
 import { cleanLLMOutput } from './output.js';
 import { findDriftedHeadings, replaceHeadings } from './corrector.js';
 import { artifactOutputPath, isDocsArtifact } from '../utils/layout.js';
+import { CANONICAL_ARTIFACTS } from '../audit/remediation.js';
+
+// Canonical artifacts that live under docs/ — their references must be docs-prefixed.
+const DOCS_ARTIFACT_NAMES = CANONICAL_ARTIFACTS
+  .map((a) => a.filename)
+  .filter((f) => isDocsArtifact(f));
+
+/**
+ * Deterministically rewrite bare references to docs/-bound artifacts into their
+ * docs/ path (e.g. `PROGRESS.md` → `docs/PROGRESS.md`), so an agent reading any
+ * artifact can locate the others. Leaves already-prefixed paths and root files
+ * (AGENTS.md, Makefile, *.json) untouched.
+ */
+export function linkDocsReferences(content: string, self?: string): string {
+  let out = content;
+  for (const name of DOCS_ARTIFACT_NAMES) {
+    if (name === self) continue; // don't docs-prefix the file's own self-references
+    const esc = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    // Preceding char must not be a word char or '/', and trailing must not
+    // continue a word or path — so "docs/PROGRESS.md" is never re-matched, while
+    // a backtick-quoted `PROGRESS.md` still is.
+    const re = new RegExp('(^|[^\\w/])' + esc + '(?![\\w/])', 'g');
+    out = out.replace(re, (_m, pre: string) => `${pre}docs/${name}`);
+  }
+  return out;
+}
 
 // Tells the LLM where harness artifacts live so cross-references resolve.
 const LAYOUT_NOTE = `REPOSITORY LAYOUT — reference other artifacts by their real path:
@@ -224,6 +250,9 @@ export async function rewriteToCanonical(
       }
     }
   }
+
+  // Point cross-references at the docs/ layout deterministically.
+  content = linkDocsReferences(content, artifact.filename);
 
   // Enforce the hard 300-line cap.
   const lines = content.split('\n');

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { rewriteToCanonical, sanitisePlaceholders } from '../src/init/rewriter';
+import { rewriteToCanonical, sanitisePlaceholders, linkDocsReferences } from '../src/init/rewriter';
 import type { LLMProvider } from '../src/utils/llm';
 
 function mockProvider(response: string): LLMProvider {
@@ -91,6 +91,31 @@ describe('rewriteToCanonical', () => {
         provider,
       ),
     ).rejects.toThrow(/Template not found/);
+  });
+});
+
+describe('linkDocsReferences', () => {
+  it('rewrites bare docs-bound references to docs/ paths', () => {
+    const out = linkDocsReferences('Read `PROGRESS.md` and ARCHITECTURE.md for context.');
+    expect(out).toContain('docs/PROGRESS.md');
+    expect(out).toContain('docs/ARCHITECTURE.md');
+  });
+
+  it('does not double-prefix already-docs paths', () => {
+    const out = linkDocsReferences('See docs/PROGRESS.md');
+    expect(out).toBe('See docs/PROGRESS.md');
+    expect(out).not.toContain('docs/docs/');
+  });
+
+  it('leaves root files (AGENTS.md, Makefile) unprefixed', () => {
+    const out = linkDocsReferences('See AGENTS.md and run Makefile');
+    expect(out).toBe('See AGENTS.md and run Makefile');
+  });
+
+  it('skips the file’s own self-reference', () => {
+    const out = linkDocsReferences('# PROGRESS.md\n\nThis is docs/PROGRESS.md', 'PROGRESS.md');
+    expect(out).toContain('# PROGRESS.md');
+    expect(out).not.toContain('docs/docs/');
   });
 });
 
