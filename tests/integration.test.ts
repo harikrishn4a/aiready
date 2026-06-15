@@ -96,7 +96,12 @@ describe('pipeline: good-repo scoring (mocked provider)', () => {
   it('passes cross-ref checks', () => {
     const files = loadRepo(goodRepo);
     const xref = crossRef(files);
-    expect(xref.checks.filter((c) => !c.passed)).toHaveLength(0);
+    // Exclude progress-md-is-fresh: it compares the committed fixture's mtime
+    // against Date.now(), so it inevitably rots past the 7-day threshold.
+    const nonTimeDependent = xref.checks.filter(
+      (c) => c.name !== 'progress-md-is-fresh',
+    );
+    expect(nonTimeDependent.filter((c) => !c.passed)).toHaveLength(0);
   });
 });
 
