@@ -8,6 +8,11 @@ export interface ReportOptions {
   planPath?: string;
 }
 
+/** Shown in CLI output so users understand scores are LLM judgements, not fixed metrics. */
+export const SCORING_DISCLOSURE =
+  'Note: scores are LLM intent-based assessments — they can vary slightly between\n' +
+  'runs and across models. Use them as directional guidance, not exact metrics.';
+
 function bar(score: number): string {
   const filled = Math.round(score / 10);
   return '█'.repeat(filled) + '░'.repeat(10 - filled);
@@ -136,9 +141,9 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
   if (criticalGaps.length > 0) {
     lines.push('');
     lines.push('Critical gaps:');
-    for (const gap of criticalGaps) {
-      lines.push(`  ✗ ${gap}`);
-    }
+    criticalGaps.forEach((gap, i) => {
+      lines.push(`  ${i + 1}. ${gap}`);
+    });
   }
 
   lines.push('');
@@ -151,6 +156,9 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
       lines.push('Next: `npx aiready init --target .`');
     }
   }
+
+  lines.push('');
+  lines.push(SCORING_DISCLOSURE);
 
   process.stdout.write(lines.join('\n') + '\n');
 }

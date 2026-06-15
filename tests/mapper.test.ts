@@ -91,8 +91,8 @@ describe('mapFiles — basic behaviour', () => {
       '{"mappings":[]}',
     );
     await mapFiles([makeFile('README.md')], provider);
-    expect(provider.chat).toHaveBeenNthCalledWith(1, expect.any(String), expect.any(String), { fast: true });
-    expect(provider.chat).toHaveBeenNthCalledWith(2, expect.any(String), expect.any(String), { fast: true });
+    expect(provider.chat).toHaveBeenNthCalledWith(1, expect.any(String), expect.any(String), { fast: true, temperature: 0, seed: 7 });
+    expect(provider.chat).toHaveBeenNthCalledWith(2, expect.any(String), expect.any(String), { fast: true, temperature: 0, seed: 7 });
   });
 
   it('returns empty array when triage finds no relevant files', async () => {

@@ -15,6 +15,9 @@ const cliBin = join(root, 'dist', 'cli.js');
 function cliEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env = { ...process.env };
   delete env['VITEST'];
+  // Point dotenv at a non-existent file so the repo's real .env (which may hold
+  // API keys) never leaks into the key-guard tests.
+  env['DOTENV_CONFIG_PATH'] = join(root, 'tests', '.env.nonexistent');
   return { ...env, ...extra };
 }
 

@@ -158,7 +158,7 @@ async function triageFiles(mdFiles: RepoFile[], provider: LLMProvider): Promise<
   const text = await provider.chat(
     TRIAGE_SYSTEM,
     `Identify harness-relevant files:\n\n${fileList}`,
-    { fast: true },
+    { fast: true, temperature: 0, seed: 7 },
   );
   return parseTriageResponse(text);
 }
@@ -174,7 +174,7 @@ async function classifyFiles(
   const text = await provider.chat(
     MAPPER_SYSTEM,
     `Classify these repository files:\n\n${fileList}`,
-    { fast: true },
+    { fast: true, temperature: 0, seed: 7 },
   );
   return parseMapperResponse(text);
 }

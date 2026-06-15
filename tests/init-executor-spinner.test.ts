@@ -97,15 +97,28 @@ describe('executeArtifact spinner — generate', () => {
     expect(mockSpinner.stop).not.toHaveBeenCalled();
   });
 
-  it('does not create a spinner for generateOnly artifacts', async () => {
+  it('does not create a spinner for verbatim generateOnly artifacts', async () => {
     const generateOnlyItem: ArtifactPlan = {
       ...MOCK_ITEM,
-      filename: 'Makefile',
-      templateFile: 'examples/Makefile',
+      filename: 'evaluator_rubric.md',
+      templateFile: 'examples/evaluator_rubric.md',
+      subsystem: null,
       generateOnly: true,
     };
     await executeArtifact(generateOnlyItem, tmp, {}, 1, 1, mockProvider());
     expect(ora).not.toHaveBeenCalled();
+  });
+
+  it('DOES create a spinner for stack-aware generateOnly artifacts (Makefile)', async () => {
+    const makefileItem: ArtifactPlan = {
+      ...MOCK_ITEM,
+      filename: 'Makefile',
+      templateFile: 'examples/Makefile',
+      subsystem: 'verification',
+      generateOnly: true,
+    };
+    await executeArtifact(makefileItem, tmp, {}, 1, 1, mockProvider('setup:\n\tpip install -r requirements.txt\ntest:\n\tpytest\n'));
+    expect(ora).toHaveBeenCalled();
   });
 });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { rewriteToCanonical, sanitisePlaceholders, linkDocsReferences } from '../src/init/rewriter';
+import { rewriteToCanonical, sanitisePlaceholders, linkDocsReferences, fixMakefileTabs, isStackAware } from '../src/init/rewriter';
 import type { LLMProvider } from '../src/utils/llm';
 
 function mockProvider(response: string): LLMProvider {
@@ -116,6 +116,59 @@ describe('linkDocsReferences', () => {
     const out = linkDocsReferences('# PROGRESS.md\n\nThis is docs/PROGRESS.md', 'PROGRESS.md');
     expect(out).toContain('# PROGRESS.md');
     expect(out).not.toContain('docs/docs/');
+  });
+});
+
+describe('isStackAware', () => {
+  it('flags Makefile, scripts, and startup.md', () => {
+    expect(isStackAware('Makefile')).toBe(true);
+    expect(isStackAware('scripts/init.sh')).toBe(true);
+    expect(isStackAware('scripts/verify.sh')).toBe(true);
+    expect(isStackAware('startup.md')).toBe(true);
+  });
+  it('does not flag pure-copy artifacts', () => {
+    expect(isStackAware('evaluator_rubric.md')).toBe(false);
+    expect(isStackAware('TASK.md')).toBe(false);
+  });
+});
+
+describe('fixMakefileTabs', () => {
+  it('converts space-indented recipe lines to tabs', () => {
+    const src = 'test:\n    pytest\nlint:\n    ruff check .\n';
+    const out = fixMakefileTabs(src);
+    expect(out).toContain('test:\n\tpytest');
+    expect(out).toContain('lint:\n\truff check .');
+    expect(out).not.toMatch(/\n {4}pytest/);
+  });
+
+  it('leaves already-tabbed recipes and non-recipe lines untouched', () => {
+    const src = '# comment\nsetup:\n\tnpm ci\n\nVAR = 1\n';
+    expect(fixMakefileTabs(src)).toBe(src);
+  });
+});
+
+describe('rewriteToCanonical — stack-aware', () => {
+  it('injects detected stack into the Makefile prompt', async () => {
+    const provider = mockProvider('setup:\n\tpip install -r requirements.txt\ntest:\n\tpytest\n');
+    // /tmp has no stack files → generic, but the DETECTED STACK block must still be present
+    await rewriteToCanonical(
+      { filename: 'Makefile', templateFile: 'Makefile', sourceFiles: [], currentContent: null },
+      '/tmp',
+      provider,
+    );
+    const userPrompt = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(userPrompt).toContain('DETECTED STACK');
+  });
+
+  it('repairs space-indented Makefile recipes from the LLM', async () => {
+    const provider = mockProvider('setup:\n    pip install -r requirements.txt\ntest:\n    pytest\n');
+    const result = await rewriteToCanonical(
+      { filename: 'Makefile', templateFile: 'Makefile', sourceFiles: [], currentContent: null },
+      '/tmp',
+      provider,
+    );
+    expect(result.content).toContain('\tpip install');
+    expect(result.content).toContain('\tpytest');
   });
 });
 

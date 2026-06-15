@@ -195,14 +195,33 @@ describe('scoreRepo — verification baseline', () => {
 });
 
 describe('scoreRepo — provider interaction', () => {
-  it('calls provider.chat with fast: false', async () => {
+  it('calls provider.chat with fast: false and deterministic settings', async () => {
     const provider = makeProvider(allZeroScores());
     await scoreRepo(makeFiles(), [], provider);
     expect(provider.chat).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      { fast: false },
+      { fast: false, temperature: 0, seed: 7 },
     );
+  });
+
+  it('shows a dedicated subsystem file even when a large entry file is also mapped', async () => {
+    const provider = makeProvider(allZeroScores());
+    const bigAgents = '# AGENTS\n' + 'x'.repeat(8000) + '\nSee CONSTRAINTS.md';
+    const mdFiles = [
+      { path: 'AGENTS.md', name: 'AGENTS.md', preview: '', fullContent: bigAgents },
+      { path: 'docs/CONSTRAINTS.md', name: 'CONSTRAINTS.md', preview: '', fullContent: '# Constraints\nMUST NOT delete prod data.' },
+    ];
+    const mappings: FileMapping[] = [
+      { path: 'AGENTS.md', subsystems: ['constraints'] },
+      { path: 'docs/CONSTRAINTS.md', subsystems: ['constraints'] },
+    ];
+    await scoreRepo(makeFiles({ mdFiles }), mappings, provider);
+    const userPrompt = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(userPrompt).toContain('=== docs/CONSTRAINTS.md ===');
+    expect(userPrompt).toContain('MUST NOT delete prod data.');
+    // dedicated file appears before the bulky entry file
+    expect(userPrompt.indexOf('docs/CONSTRAINTS.md')).toBeLessThan(userPrompt.indexOf('=== AGENTS.md ==='));
   });
 
   it('uses the intent-based scoring system prompt', async () => {

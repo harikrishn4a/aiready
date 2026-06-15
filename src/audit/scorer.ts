@@ -92,6 +92,14 @@ SCORING RULES:
 - A workflow doc or changelog scores max 20 — these are not harness artifacts
 - For each subsystem, return specific gaps an agent would notice
 
+SCORE BANDS — anchor every score to these definitions (do not score between bands arbitrarily):
+- 90-100: an agent can fully do its job from this alone — specific, complete, immediately actionable
+- 70-89:  mostly sufficient — minor gaps an agent could work around
+- 40-69:  partial — key facts present but the agent would still need to explore or ask
+- 20-39:  sparse — mostly placeholders, generic text, or "Not yet documented"
+- 0-19:   absent or useless
+Apply the bands consistently: identical content must always receive the same score.
+
 TEMPLATE REFERENCE (quality examples — headings are suggestions not requirements):
 ${templateContext}
 
@@ -143,6 +151,22 @@ function normalizeFindings(entry: LLMScoreEntry): Finding[] {
   return [];
 }
 
+// Per-file content budget. Capping per file (not the joined blob) guarantees a
+// dedicated artifact (e.g. docs/CONSTRAINTS.md) is always shown to the scorer even
+// when a large AGENTS.md is also mapped to the same subsystem.
+const PER_FILE_CONTENT_CAP = 6000;
+
+// Agent entry files reference everything, so they get mapped broadly. Show the
+// subsystem's dedicated files first so entry-file references never crowd them out.
+const ENTRY_FILE_BASENAMES = new Set([
+  'agents.md', 'claude.md', 'agent.md', 'copilot-instructions.md',
+  '.cursorrules', '.windsurfrules',
+]);
+
+function isEntryFile(path: string): boolean {
+  return ENTRY_FILE_BASENAMES.has((path.split('/').pop() ?? path).toLowerCase());
+}
+
 function buildSubsystemContent(
   subsystem: Subsystem,
   mdFiles: RepoFiles['mdFiles'],
@@ -151,12 +175,15 @@ function buildSubsystemContent(
   const mappedPaths = mappings.filter((m) => m.subsystems.includes(subsystem)).map((m) => m.path);
   if (mappedPaths.length === 0) return { files: [], content: '' };
 
+  // Dedicated artifacts first, entry files (AGENTS.md etc.) last.
+  const ordered = [...mappedPaths].sort((a, b) => Number(isEntryFile(a)) - Number(isEntryFile(b)));
+
   const fileMap = new Map(mdFiles.map((f) => [f.path, f.fullContent]));
-  const sections = mappedPaths.map((p) => {
-    const content = fileMap.get(p) ?? '';
+  const sections = ordered.map((p) => {
+    const content = (fileMap.get(p) ?? '').slice(0, PER_FILE_CONTENT_CAP);
     return `=== ${p} ===\n${content}`;
   });
-  return { files: mappedPaths, content: sections.join('\n\n') };
+  return { files: ordered, content: sections.join('\n\n') };
 }
 
 // Verification baseline — surfaced to the user as a finding only. It is NOT a
@@ -261,15 +288,17 @@ export async function scoreRepo(
   const contentSections = subsystemContents
     .map(({ subsystem, content }) => {
       if (!content) return `### ${subsystem}\n(no files mapped to this subsystem)`;
-      return `### ${subsystem}\n${content.slice(0, 3000)}`;
+      // Per-file capping already bounds each file; allow several files per subsystem.
+      return `### ${subsystem}\n${content.slice(0, 16000)}`;
     })
     .join('\n\n');
 
   // Single LLM call scores all 5 subsystems intent-based.
+  // temperature:0 + fixed seed keep repeated audits of identical content stable.
   const text = await provider.chat(
     buildScoringSystemPrompt(templates),
     `Score this repository's AI harness:\n\n${contentSections}`,
-    { fast: false },
+    { fast: false, temperature: 0, seed: 7 },
   );
 
   const llmScores = parseScorerResponse(text);

@@ -11,6 +11,7 @@ import { consolidateEntryPoints } from './consolidator.js';
 import type { ArtifactPlan, InitPlan } from './planner.js';
 import { CANONICAL_ARTIFACTS } from '../audit/remediation.js';
 import { planFilePath, PLAN_DIR } from '../utils/layout.js';
+import { SCORING_DISCLOSURE } from '../audit/reporter.js';
 
 export type { InitFlags };
 
@@ -129,6 +130,35 @@ function suggestNoiseCleaning(plan: InitPlan): void {
   console.log(sep);
 }
 
+function printRemainingGaps(
+  afterSubs: Record<string, number>,
+  gaps: Record<string, string[]>,
+): void {
+  const subsystems = ['identity', 'verification', 'state', 'memory', 'constraints'];
+  const below100 = subsystems.filter((s) => (afterSubs[s] ?? 0) < 100);
+  if (below100.length === 0) return;
+
+  const sep = '─'.repeat(52);
+  console.log(`\n${sep}`);
+  console.log("REMAINING GAPS — why the score isn't 100");
+  console.log(sep);
+  for (const sub of subsystems) {
+    const score = afterSubs[sub] ?? 0;
+    const topGap = gaps[sub]?.[0] ?? (score >= 100 ? '—' : 'minor polish');
+    console.log(`  ${sub.padEnd(13)} ${String(score).padStart(3)}   ${topGap}`);
+  }
+
+  console.log('\nSome gaps cannot be filled by generation alone — they need ground');
+  console.log('truth that lives outside the documents:');
+  console.log('  • live session state (done / in progress / next task / blockers)');
+  console.log('    — keep PROGRESS.md and docs/SESSION-HANDOFF.md current as you work');
+  console.log('  • code-derived architecture (per-module responsibilities, data flow)');
+  console.log('    — Stage 3 `npx aiready analyze` reads the actual source code');
+  console.log('  • project-specific constraints and exact dependency versions');
+  console.log(`\n${SCORING_DISCLOSURE}`);
+  console.log(sep);
+}
+
 export async function runInit(target: string, flags: InitFlags): Promise<void> {
   const targetDir = resolve(target);
   const planPath = planFilePath(targetDir);
@@ -230,6 +260,8 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
   const scoreAfter = scoreAfterResult.overall;
 
   printScoreDelta(scoreBefore, scoreAfter, beforeSubs, scoreAfterResult.subsystems, plan.artifacts);
+
+  printRemainingGaps(scoreAfterResult.subsystems, scoreAfterResult.gaps);
 
   suggestNoiseCleaning(plan);
 

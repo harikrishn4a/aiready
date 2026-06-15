@@ -7,6 +7,7 @@ import type { LLMProvider } from '../utils/llm.js';
 export interface AuditScoreResult {
   overall: number;
   subsystems: Record<string, number>;
+  gaps: Record<string, string[]>;
 }
 
 export async function getAuditScoreDetailed(
@@ -17,15 +18,11 @@ export async function getAuditScoreDetailed(
   const files = loadRepo(targetDir);
   const mappings = await mapFiles(files.mdFiles, provider, files.usedGraphify);
   const scored = await scoreRepo(files, mappings, provider);
+  const subs = ['identity', 'verification', 'state', 'memory', 'constraints'] as const;
   return {
     overall: scored.overall,
-    subsystems: {
-      identity: scored.identity.score,
-      verification: scored.verification.score,
-      state: scored.state.score,
-      memory: scored.memory.score,
-      constraints: scored.constraints.score,
-    },
+    subsystems: Object.fromEntries(subs.map((s) => [s, scored[s].score])),
+    gaps: Object.fromEntries(subs.map((s) => [s, scored[s].gaps])),
   };
 }
 

@@ -8,7 +8,7 @@ const RESET = '\x1b[0m';
 const SPINNER_FRAMES = ['·', '✻', '✽', '✶', '✳', '✢'].map((f) => `${SEA_GREEN}${f}${RESET}`);
 import type { ArtifactPlan } from './planner.js';
 import { loadTemplate, BLANK_TEMPLATE_FILES, type InitContext } from './generator.js';
-import { rewriteToCanonical, sanitisePlaceholders } from './rewriter.js';
+import { rewriteToCanonical, sanitisePlaceholders, isStackAware } from './rewriter.js';
 import { resolveArtifactSources } from './context.js';
 import { cleanLLMOutput } from './output.js';
 
@@ -48,6 +48,9 @@ function writeArtifact(filePath: string, content: string, filename: string): num
 }
 
 function isTemplateCopy(artifact: ArtifactPlan): boolean {
+  // Stack-aware generateOnly artifacts (Makefile, scripts, startup.md) are rewritten
+  // to match the real toolchain — only the remaining generateOnly files are verbatim.
+  if (isStackAware(artifact.filename)) return false;
   return Boolean(
     artifact.generateOnly ||
     (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename)),

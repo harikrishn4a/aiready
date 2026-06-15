@@ -6,6 +6,20 @@ import { cleanLLMOutput } from './output.js';
 import { findDriftedHeadings, replaceHeadings } from './corrector.js';
 import { artifactOutputPath, isDocsArtifact } from '../utils/layout.js';
 import { CANONICAL_ARTIFACTS } from '../audit/remediation.js';
+import { detectStack } from '../utils/detect.js';
+
+// generateOnly artifacts whose commands must match the real toolchain. These are
+// rewritten with detected-stack context instead of being copied verbatim.
+export const STACK_AWARE_FILES = new Set<string>([
+  'Makefile',
+  'scripts/init.sh',
+  'scripts/verify.sh',
+  'startup.md',
+]);
+
+export function isStackAware(filename: string): boolean {
+  return STACK_AWARE_FILES.has(filename);
+}
 
 // Canonical artifacts that live under docs/ — their references must be docs-prefixed.
 const DOCS_ARTIFACT_NAMES = CANONICAL_ARTIFACTS
@@ -141,6 +155,36 @@ STRUCTURE (maintain exactly, never reorder): Date, What was completed,
 Verification run (Command | Result table), What is broken or unverified,
 Next best step, Must not change.
 CUSTOMIZE: real session state, real feature IDs/titles, real verification results.`,
+
+  'Makefile': `FILE: Makefile
+KEEP: target names (setup, dev, check, test, lint, clean, build, typecheck, format),
+.PHONY declaration, and the comment structure above each target.
+CUSTOMIZE: replace the command inside EVERY target with the real command for THIS
+project's stack (from DETECTED STACK below). Examples by stack: Python →
+setup: pip install -r requirements.txt, test: pytest, lint: ruff check ., dev:
+uvicorn app:app --reload; Node → use the package.json scripts; Go → go test ./...
+Remove targets that do not apply (e.g. typecheck for a language without a type checker).
+CRITICAL: recipe lines MUST be indented with a TAB, never spaces. Do not emit npm
+commands for a non-Node project. Output a valid Makefile only — no prose, no fences.`,
+
+  'scripts/init.sh': `FILE: scripts/init.sh
+KEEP: shebang (#!/usr/bin/env bash), set -e, and a clear install flow.
+CUSTOMIZE: use the real install command for THIS stack (from DETECTED STACK) —
+e.g. pip install -r requirements.txt, npm ci, go mod download, cargo fetch.
+Output a runnable shell script only — no prose, no markdown fences.`,
+
+  'scripts/verify.sh': `FILE: scripts/verify.sh
+KEEP: shebang (#!/usr/bin/env bash), set -e, and a build → typecheck → lint → test flow.
+CUSTOMIZE: use the real commands for THIS stack (from DETECTED STACK) — e.g. Python:
+ruff check . then pytest; Node: npm run build / typecheck / lint / test. Echo a clear
+"All checks passed." at the end. Output a runnable shell script only — no fences.`,
+
+  'startup.md': `FILE: STARTUP.md
+KEEP: the "Action | Command" table, and the Start commands / Current state /
+Project structure sections.
+CUSTOMIZE: commands must reference real Makefile targets or this stack's tools
+(from DETECTED STACK), not npm defaults unless this is a Node project. Show the
+actual top-level directory layout.`,
 };
 
 function guidanceFor(filename: string): string | undefined {
@@ -162,6 +206,7 @@ function buildRewritePrompt(
   templateContent: string,
   sourceContents: string[],
   currentContent: string | null,
+  stackInfo: string | null,
 ): string {
   const parts: string[] = [
     `Create ${filename} following this template exactly:`,
@@ -169,6 +214,14 @@ function buildRewritePrompt(
     templateContent,
     `=== END TEMPLATE ===`,
   ];
+
+  if (stackInfo) {
+    parts.push(
+      `\n=== DETECTED STACK (make every command match this — do NOT emit npm commands for a non-Node project) ===`,
+      stackInfo,
+      `=== END DETECTED STACK ===`,
+    );
+  }
 
   if (currentContent && currentContent.trim().length > 0) {
     parts.push(
@@ -201,6 +254,33 @@ function buildRewritePrompt(
   return parts.join('\n');
 }
 
+/**
+ * Makefiles require TAB-indented recipe lines. LLMs frequently emit spaces, which
+ * breaks `make`. Convert leading spaces to a tab on recipe lines (any indented,
+ * non-blank line that follows a target line until the next unindented line).
+ */
+export function fixMakefileTabs(content: string): string {
+  const lines = content.split('\n');
+  let inRecipe = false;
+  return lines
+    .map((line) => {
+      if (/^[A-Za-z0-9_.][A-Za-z0-9_.\-/ ]*:(?!=)/.test(line)) {
+        inRecipe = true; // target line — recipes follow
+        return line;
+      }
+      if (line.trim() === '') return line; // blank lines don't end a recipe block
+      if (/^\S/.test(line)) {
+        inRecipe = false; // unindented, non-target → out of recipe
+        return line;
+      }
+      if (inRecipe && /^[ ]+/.test(line)) {
+        return line.replace(/^[ \t]+/, '\t'); // normalise leading whitespace to one tab
+      }
+      return line;
+    })
+    .join('\n');
+}
+
 /** Safety net: strip any {{PLACEHOLDER}} text the LLM left behind. */
 export function sanitisePlaceholders(content: string): string {
   return content
@@ -231,14 +311,21 @@ export async function rewriteToCanonical(
     }
   }
 
+  const stackInfo = isStackAware(artifact.filename) ? detectStack(target) : null;
+
   const raw = await provider.chat(
     buildSystemPrompt(artifact.filename),
-    buildRewritePrompt(artifact.filename, template, sourceContents, artifact.currentContent),
+    buildRewritePrompt(artifact.filename, template, sourceContents, artifact.currentContent, stackInfo),
     { fast: false },
   );
 
   const changes: string[] = [];
   let content = cleanLLMOutput(raw);
+
+  // Makefiles need TAB-indented recipes — repair LLM space indentation.
+  if (artifact.filename === 'Makefile') {
+    content = fixMakefileTabs(content);
+  }
 
   // Deterministic heading correction — restore drifted headings to canonical.
   if (template.trim().length > 0) {

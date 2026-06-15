@@ -4,8 +4,16 @@ import type { ModelDef } from './models.js';
 import { OPENAI_FALLBACK_MODELS } from './models.js';
 import { estimateTokens } from './tokens.js';
 
+export interface ChatOptions {
+  fast?: boolean;
+  /** Sampling temperature. Pass 0 for the most repeatable output (scoring/mapping). */
+  temperature?: number;
+  /** Deterministic sampling seed (OpenAI-compatible providers only). */
+  seed?: number;
+}
+
 export interface LLMProvider {
-  chat(system: string, user: string, opts?: { fast?: boolean }): Promise<string>;
+  chat(system: string, user: string, opts?: ChatOptions): Promise<string>;
   getTotalTokens(): number;
 }
 
@@ -35,13 +43,14 @@ export class AnthropicProvider implements LLMProvider {
     return this.totalTokens;
   }
 
-  async chat(system: string, user: string, opts?: { fast?: boolean }): Promise<string> {
+  async chat(system: string, user: string, opts?: ChatOptions): Promise<string> {
     // If a specific model was chosen, always use it; otherwise route by fast hint
     const model = this.modelId ?? (opts?.fast ? ANTHROPIC_FAST : ANTHROPIC_QUALITY);
     const maxTokens = opts?.fast ? 1024 : 2048;
     const response = await this.client.messages.create({
       model,
       max_tokens: maxTokens,
+      ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       messages: [{ role: 'user', content: user }],
     });
@@ -72,10 +81,12 @@ export class OpenAIProvider implements LLMProvider {
     return this.totalTokens;
   }
 
-  async chat(system: string, user: string, opts?: { fast?: boolean }): Promise<string> {
+  async chat(system: string, user: string, opts?: ChatOptions): Promise<string> {
     const model = this.modelId ?? (opts?.fast ? OPENAI_FAST : OPENAI_QUALITY);
     const response = await this.client.chat.completions.create({
       model,
+      ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -107,9 +118,11 @@ export class OllamaProvider implements LLMProvider {
     return this.totalTokens;
   }
 
-  async chat(system: string, user: string): Promise<string> {
+  async chat(system: string, user: string, opts?: ChatOptions): Promise<string> {
     const response = await this.client.chat.completions.create({
       model: this.model,
+      ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
