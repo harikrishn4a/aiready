@@ -147,6 +147,43 @@ describe('fixMakefileTabs', () => {
   });
 });
 
+describe('rewriteToCanonical — feature_list.json (JSON path)', () => {
+  it('returns valid LLM JSON unchanged and skips markdown post-processing', async () => {
+    const json = JSON.stringify({ project: 'x', features: [{ id: 'feat-001', status: 'not_started' }] }, null, 2);
+    const provider = mockProvider('```json\n' + json + '\n```');
+    const result = await rewriteToCanonical(
+      { filename: 'feature_list.json', templateFile: 'feature-list.json', sourceFiles: [], currentContent: null },
+      '/tmp',
+      provider,
+    );
+    expect(() => JSON.parse(result.content)).not.toThrow();
+    expect(result.content).toContain('feat-001');
+  });
+
+  it('falls back to the template when the model returns invalid JSON', async () => {
+    const provider = mockProvider('here is your feature list: not json at all');
+    const result = await rewriteToCanonical(
+      { filename: 'feature_list.json', templateFile: 'feature-list.json', sourceFiles: [], currentContent: null },
+      '/tmp',
+      provider,
+    );
+    expect(() => JSON.parse(result.content)).not.toThrow(); // template is valid JSON
+    expect(result.changes.some((c) => c.includes('invalid JSON'))).toBe(true);
+  });
+
+  it('dispatches the feature_list.json per-file prompt (valid JSON only)', async () => {
+    const provider = mockProvider('{"project":"x","features":[]}');
+    await rewriteToCanonical(
+      { filename: 'feature_list.json', templateFile: 'feature-list.json', sourceFiles: [], currentContent: null },
+      '/tmp',
+      provider,
+    );
+    const systemPrompt = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(systemPrompt).toContain('Output VALID JSON ONLY');
+    expect(systemPrompt).toContain('not_started');
+  });
+});
+
 describe('stripRepoPrefix', () => {
   it('removes `cd <repo> &&` and `<repo>/` path prefixes', () => {
     const src = 'setup:\n\tcd betterworld && bash setup.sh\ntest:\n\tpytest betterworld/\nlint:\n\truff check betterworld/\n';

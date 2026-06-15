@@ -11,7 +11,7 @@ export interface InitContext {
 // Files whose canonical form is a direct template copy (generateOnly artifacts
 // plus blank templates). These never go through the LLM rewrite.
 export const BLANK_TEMPLATE_FILES = new Set([
-  'TASK.md', 'features.md', 'feature_list.json', 'feature-list-schema.json',
+  'TASK.md', 'feature-list-schema.json',
   'QUALITY.md', 'quality-document.md', 'evaluator_rubric.md',
   'clean-state-checklist.md', 'startup.md',
   'Makefile', 'scripts/init.sh', 'scripts/verify.sh',

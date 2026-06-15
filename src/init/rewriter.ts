@@ -179,6 +179,23 @@ CUSTOMIZE: use the real commands for THIS stack (from DETECTED STACK) — e.g. P
 ruff check . then pytest; Node: npm run build / typecheck / lint / test. Echo a clear
 "All checks passed." at the end. Output a runnable shell script only — no fences.`,
 
+  'features.md': `FILE: features.md
+KEEP: the feature-list structure and status conventions from the template.
+CUSTOMIZE: derive the actual features from the SOURCE CONTEXT — especially any
+FEATURE_PLAN / ROADMAP / PROGRESS doc. List each real feature with a short
+description and a status. Use "not started" / "in progress" / "done" honestly;
+where status is unknown, mark it "not started" — never invent completion.`,
+
+  'feature_list.json': `FILE: feature_list.json
+Output VALID JSON ONLY — no prose, no markdown, no code fences.
+KEEP top-level fields exactly: project, last_updated, rules, status_legend, features.
+CUSTOMIZE: build the "features" array from the SOURCE CONTEXT (especially
+FEATURE_PLAN / ROADMAP). Each feature object: id (feat-001…), priority, area,
+title, user_visible_behavior, status, blocked_reason, verification, evidence,
+agent_notes, last_updated. Set status to "not_started" where unknown — never
+fabricate "passing". Derive area/title from the source; leave evidence [] and
+agent_notes "" when unknown.`,
+
   'startup.md': `FILE: STARTUP.md
 KEEP: the "Action | Command" table, and the Start commands / Current state /
 Project structure sections.
@@ -343,6 +360,19 @@ export async function rewriteToCanonical(
 
   const changes: string[] = [];
   let content = cleanLLMOutput(raw);
+
+  // JSON artifacts (feature_list.json): validate and fall back to the template on
+  // invalid JSON. Skip all markdown-only post-processing (headings, docs-links, tabs).
+  if (artifact.filename.endsWith('.json')) {
+    try {
+      JSON.parse(content);
+    } catch {
+      content = template;
+      changes.push('invalid JSON from model — used template');
+    }
+    if (extractedFrom.length > 0) changes.push(`extracted from ${extractedFrom.join(', ')}`);
+    return { content, changes, extractedFrom };
+  }
 
   // Stack-aware files live at the repo root — remove any self-repo path prefix.
   if (isStackAware(artifact.filename)) {
