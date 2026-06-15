@@ -5,10 +5,11 @@ import { runAudit } from '../audit/index.js';
 import { selectAuditConfig } from '../utils/prompt.js';
 import { createProvider } from '../utils/llm.js';
 import { buildInitPlan } from './planner.js';
-import { executeGenerate, executeImprove, type InitFlags } from './executor.js';
+import { executeArtifact, type InitFlags } from './executor.js';
 import { getAuditScoreDetailed } from './scorer.js';
 import { consolidateEntryPoints } from './consolidator.js';
-import type { ArtifactPlan } from './planner.js';
+import type { ArtifactPlan, InitPlan } from './planner.js';
+import { CANONICAL_ARTIFACTS } from '../audit/remediation.js';
 
 export type { InitFlags };
 
@@ -85,6 +86,42 @@ function printScoreDelta(
   } else {
     console.log('\nScore decreased. Generated files may need manual review.');
   }
+  console.log(sep);
+}
+
+// Agent entry files are consolidated into shims, not removed — never suggest them.
+const AGENT_ENTRY_FILES = new Set([
+  'CLAUDE.md', 'AGENT.md', '.windsurfrules', '.cursorrules',
+  '.github/copilot-instructions.md',
+]);
+
+function suggestNoiseCleaning(plan: InitPlan): void {
+  const canonicalFilenames = new Set(CANONICAL_ARTIFACTS.map((a) => a.filename));
+  const sourcesUsed = new Set(plan.artifacts.flatMap((a) => a.sourceFiles));
+
+  const noiseCandidates = [...sourcesUsed].filter((f) => {
+    if (canonicalFilenames.has(f)) return false;   // keep canonical files
+    if (AGENT_ENTRY_FILES.has(f)) return false;     // shimmed, not noise
+    if (f === 'README.md') return false;            // never suggest removing README
+    if (f.startsWith('.aiready/')) return false;    // keep aiready internal files
+    if (f === 'package.json') return false;         // build manifest, not noise
+    if (f.startsWith('scripts/')) return false;     // keep scripts
+    if (f.startsWith('change_logs/')) return true;  // changelog files are candidates
+    return true;                                    // other non-canonical sources
+  });
+
+  if (noiseCandidates.length === 0) return;
+
+  const sep = '─'.repeat(52);
+  console.log(`\n${sep}`);
+  console.log('SOURCE FILES — review for cleanup');
+  console.log(sep);
+  console.log('Content from these files has been extracted into canonical artifacts.');
+  console.log('After manual review, consider removing them to reduce noise:\n');
+  for (const file of noiseCandidates) {
+    console.log(`  ${file}`);
+  }
+  console.log('\nDo not delete without reviewing — content may not be fully captured.');
   console.log(sep);
 }
 
@@ -172,13 +209,12 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
     if (artifact.action === 'skip' && !forced) continue;
 
     step++;
-    const action = forced && artifact.action === 'skip' ? 'generate' : artifact.action;
+    // A forced skip is materialised as a generate.
+    const effective: ArtifactPlan = forced && artifact.action === 'skip'
+      ? { ...artifact, action: 'generate' }
+      : artifact;
 
-    if (action === 'generate') {
-      await executeGenerate(artifact, targetDir, flags, step, actionCount, provider, initContext);
-    } else if (action === 'improve') {
-      await executeImprove(artifact, targetDir, flags, step, actionCount, provider, initContext);
-    }
+    await executeArtifact(effective, targetDir, flags, step, actionCount, provider, initContext);
   }
 
   // Consolidate entry points (CLAUDE.md etc. → AGENTS.md shims)
@@ -190,6 +226,8 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
   const scoreAfter = scoreAfterResult.overall;
 
   printScoreDelta(scoreBefore, scoreAfter, beforeSubs, scoreAfterResult.subsystems, plan.artifacts);
+
+  suggestNoiseCleaning(plan);
 
   const totalTokens = provider.getTotalTokens();
   const display = totalTokens >= 1000 ? `~${Math.ceil(totalTokens / 1000)}k` : `~${totalTokens}`;

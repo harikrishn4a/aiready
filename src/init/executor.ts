@@ -7,10 +7,10 @@ const SEA_GREEN = '\x1b[38;2;46;139;87m';
 const RESET = '\x1b[0m';
 const SPINNER_FRAMES = ['·', '✻', '✽', '✶', '✳', '✢'].map((f) => `${SEA_GREEN}${f}${RESET}`);
 import type { ArtifactPlan } from './planner.js';
-import { generateArtifact, loadTemplate, type InitContext } from './generator.js';
-import { improveArtifact } from './improver.js';
+import { loadTemplate, BLANK_TEMPLATE_FILES, type InitContext } from './generator.js';
+import { rewriteToCanonical, sanitisePlaceholders } from './rewriter.js';
+import { resolveArtifactSources } from './context.js';
 import { cleanLLMOutput } from './output.js';
-import { correctHeadings } from './corrector.js';
 
 export interface InitFlags {
   provider?: string;
@@ -47,7 +47,19 @@ function writeArtifact(filePath: string, content: string, filename: string): num
   return content.split('\n').length;
 }
 
-export async function executeGenerate(
+function isTemplateCopy(artifact: ArtifactPlan): boolean {
+  return Boolean(
+    artifact.generateOnly ||
+    (artifact.alwaysGenerate && BLANK_TEMPLATE_FILES.has(artifact.filename)),
+  );
+}
+
+/**
+ * Unified artifact executor — handles both GENERATE and IMPROVE.
+ * - generateOnly / blank-template artifacts are written as direct template copies.
+ * - all other artifacts are rewritten into canonical form via rewriteToCanonical.
+ */
+export async function executeArtifact(
   artifact: ArtifactPlan,
   target: string,
   flags: InitFlags,
@@ -58,89 +70,65 @@ export async function executeGenerate(
 ): Promise<void> {
   const filePath = join(target, artifact.filename);
   const label = `[${step}/${total}]`;
+  const fileExists = existsSync(filePath);
+  const action = artifact.action === 'improve' ? 'Improving' : 'Generating';
 
-  console.log(`${label} Generating ${artifact.filename}`);
+  console.log(`${label} ${action} ${artifact.filename}`);
   if (artifact.subsystem) console.log(`      Subsystem: ${artifact.subsystem}`);
   if (artifact.sourceFiles.length > 0) {
-    console.log(`      Sources: ${artifact.sourceFiles.join(', ')}`);
+    console.log(`      Sources: ${artifact.sourceFiles.slice(0, 4).join(', ')}`);
   }
-  console.log(`      Template: ${artifact.templateFile}`);
 
-  const fileExists = existsSync(filePath);
-  const forceThis = isForced(flags, artifact.filename);
-  if (fileExists && !forceThis && !artifact.alwaysGenerate) {
+  // GENERATE skip semantics: existing file, not forced, not always-regenerate.
+  if (artifact.action === 'generate' && fileExists && !isForced(flags, artifact.filename) && !artifact.alwaysGenerate) {
     console.log(`      ⊜ Skipped — already exists (use --force ${artifact.filename} to overwrite)\n`);
     return;
   }
 
-  if (artifact.generateOnly) {
-    const rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
-    const lines = writeArtifact(filePath, rawContent, artifact.filename);
-    console.log(`      ✓ Written — ${lines} lines\n`);
-    return;
-  }
-
-  const spinner = ora({ text: 'Generating...', indent: 6, spinner: { interval: 120, frames: SPINNER_FRAMES } }).start();
-  try {
-    const rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
-    spinner.text = 'Correcting headings...';
-    const template = loadTemplate(artifact.templateFile);
-    const { content: corrected, corrections } = await correctHeadings(
-      rawContent, template, artifact.filename, provider,
-    );
-    const finalContent = cleanLLMOutput(corrected);
-    spinner.stop();
-    if (corrections.length > 0) {
-      console.log(`      ↻ Corrected: ${corrections.join(', ')}`);
-    }
-    const lines = writeArtifact(filePath, finalContent, artifact.filename);
-    console.log(`      ✓ Written — ${lines} lines\n`);
-  } catch (error) {
-    spinner.fail(`Failed: ${(error as Error).message}`);
-    throw error;
-  }
-}
-
-export async function executeImprove(
-  artifact: ArtifactPlan,
-  target: string,
-  flags: InitFlags,
-  step: number,
-  total: number,
-  provider: LLMProvider,
-  initContext?: InitContext,
-): Promise<void> {
-  const filePath = join(target, artifact.filename);
-  const label = `[${step}/${total}]`;
-
-  console.log(`${label} Improving ${artifact.filename}`);
-  console.log(`      Reason: ${artifact.reason}`);
-
-  if (!existsSync(filePath)) {
+  // IMPROVE skip semantics: nothing to improve if the file is absent.
+  if (artifact.action === 'improve' && !fileExists) {
     console.log(`      ⊜ Skipped — file does not exist\n`);
     return;
   }
 
-  const spinner = ora({ text: 'Improving...', indent: 6, spinner: { interval: 120, frames: SPINNER_FRAMES } }).start();
+  // Template-copy artifacts never go through the LLM.
+  if (isTemplateCopy(artifact)) {
+    const template = cleanLLMOutput(loadTemplate(artifact.templateFile));
+    const lines = writeArtifact(filePath, template, artifact.filename);
+    console.log(`      ✓ Written — ${lines} lines (template copy)\n`);
+    return;
+  }
+
+  const currentContent = fileExists ? readFileSync(filePath, 'utf-8') : null;
+
+  const spinner = ora({ text: `${action}...`, indent: 6, spinner: { interval: 120, frames: SPINNER_FRAMES } }).start();
   try {
-    const currentContent = readFileSync(filePath, 'utf-8');
-    let rawContent: string;
-    if (currentContent.trim().length === 0) {
-      console.log(`      Empty file — using generate path`);
-      rawContent = cleanLLMOutput(await generateArtifact(artifact, target, provider, initContext));
-    } else {
-      rawContent = cleanLLMOutput(await improveArtifact(artifact, target, provider, initContext));
-    }
-    spinner.text = 'Correcting headings...';
-    const template = loadTemplate(artifact.templateFile);
-    const { content: corrected, corrections } = await correctHeadings(
-      rawContent, template, artifact.filename, provider,
+    const resolved = resolveArtifactSources(
+      target,
+      artifact.subsystem,
+      artifact.sourceFiles,
+      initContext?.subsystemSources ?? {},
+      initContext?.sourceContext ?? [],
     );
-    const finalContent = cleanLLMOutput(corrected);
+
+    const { content: rewritten, changes } = await rewriteToCanonical(
+      {
+        filename: artifact.filename,
+        templateFile: artifact.templateFile,
+        sourceFiles: resolved.sourceFiles,
+        currentContent,
+      },
+      target,
+      provider,
+    );
+
+    const finalContent = sanitisePlaceholders(rewritten);
     spinner.stop();
-    if (corrections.length > 0) {
-      console.log(`      ↻ Corrected: ${corrections.join(', ')}`);
+
+    if (changes.length > 0) {
+      console.log(`      ↻ ${changes.join(', ')}`);
     }
+
     const lines = writeArtifact(filePath, finalContent, artifact.filename);
     console.log(`      ✓ Written — ${lines} lines\n`);
   } catch (error) {

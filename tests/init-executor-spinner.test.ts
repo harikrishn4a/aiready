@@ -8,9 +8,9 @@ import type { ArtifactPlan } from '../src/init/planner';
 vi.mock('ora');
 
 import ora from 'ora';
-import { executeGenerate, executeImprove } from '../src/init/executor';
+import { executeArtifact } from '../src/init/executor';
 
-// Non-generateOnly artifact so spinner is triggered
+// Non-generateOnly artifact so the spinner is triggered.
 const MOCK_ITEM: ArtifactPlan = {
   filename: 'CONSTRAINTS.md',
   action: 'generate',
@@ -35,7 +35,7 @@ const MOCK_IMPROVE_ITEM: ArtifactPlan = {
   generateOnly: false,
 };
 
-// Long enough to pass assertWritableContent (>= 3 lines) with real headings
+// Long enough to pass assertWritableContent (>= 3 lines) with real headings.
 const GOOD_CONTENT =
   '## Scope\nProject-specific scope\n\n## Verification\nRun tests\n\n' +
   '## Artifacts\nList here\n\n## Dependencies\nNone\n\n## Rules\nFollow them';
@@ -71,23 +71,18 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe('executeGenerate spinner', () => {
+describe('executeArtifact spinner — generate', () => {
   it('starts and stops spinner on successful generation', async () => {
-    await executeGenerate(MOCK_ITEM, tmp, {}, 1, 5, mockProvider());
+    await executeArtifact(MOCK_ITEM, tmp, {}, 1, 5, mockProvider());
     expect(mockSpinner.start).toHaveBeenCalled();
     expect(mockSpinner.stop).toHaveBeenCalled();
     expect(mockSpinner.fail).not.toHaveBeenCalled();
   });
 
-  it('updates spinner text to "Correcting headings..." before correction', async () => {
-    let textAtCorrection = '';
-    vi.mocked(ora).mockReturnValue({
-      ...mockSpinner,
-      get text() { return textAtCorrection; },
-      set text(v: string) { textAtCorrection = v; },
-    } as ReturnType<typeof ora>);
-    await executeGenerate(MOCK_ITEM, tmp, {}, 1, 5, mockProvider());
-    expect(textAtCorrection).toBe('Correcting headings...');
+  it('creates the spinner with the Generating action text', async () => {
+    await executeArtifact(MOCK_ITEM, tmp, {}, 1, 5, mockProvider());
+    const call = vi.mocked(ora).mock.calls[0][0] as { text: string };
+    expect(call.text).toBe('Generating...');
   });
 
   it('calls spinner.fail on LLM error and re-throws', async () => {
@@ -96,28 +91,28 @@ describe('executeGenerate spinner', () => {
       getTotalTokens: () => 0,
     };
     await expect(
-      executeGenerate(MOCK_ITEM, tmp, {}, 1, 5, errorProvider),
+      executeArtifact(MOCK_ITEM, tmp, {}, 1, 5, errorProvider),
     ).rejects.toThrow('API timeout');
     expect(mockSpinner.fail).toHaveBeenCalled();
     expect(mockSpinner.stop).not.toHaveBeenCalled();
   });
 
-  it('does not create spinner for generateOnly artifacts', async () => {
+  it('does not create a spinner for generateOnly artifacts', async () => {
     const generateOnlyItem: ArtifactPlan = {
       ...MOCK_ITEM,
       filename: 'Makefile',
       templateFile: 'examples/Makefile',
       generateOnly: true,
     };
-    await executeGenerate(generateOnlyItem, tmp, {}, 1, 1, mockProvider());
+    await executeArtifact(generateOnlyItem, tmp, {}, 1, 1, mockProvider());
     expect(ora).not.toHaveBeenCalled();
   });
 });
 
-describe('executeImprove spinner', () => {
+describe('executeArtifact spinner — improve', () => {
   it('starts and stops spinner on successful improve', async () => {
     writeFileSync(join(tmp, 'CONSTRAINTS.md'), GOOD_CONTENT);
-    await executeImprove(MOCK_IMPROVE_ITEM, tmp, {}, 1, 1, mockProvider());
+    await executeArtifact(MOCK_IMPROVE_ITEM, tmp, {}, 1, 1, mockProvider());
     expect(mockSpinner.start).toHaveBeenCalled();
     expect(mockSpinner.stop).toHaveBeenCalled();
     expect(mockSpinner.fail).not.toHaveBeenCalled();
@@ -130,13 +125,13 @@ describe('executeImprove spinner', () => {
       getTotalTokens: () => 0,
     };
     await expect(
-      executeImprove(MOCK_IMPROVE_ITEM, tmp, {}, 1, 1, errorProvider),
+      executeArtifact(MOCK_IMPROVE_ITEM, tmp, {}, 1, 1, errorProvider),
     ).rejects.toThrow('Network error');
     expect(mockSpinner.fail).toHaveBeenCalled();
   });
 
-  it('does not create spinner when file does not exist', async () => {
-    await executeImprove(MOCK_IMPROVE_ITEM, tmp, {}, 1, 1, mockProvider());
+  it('does not create a spinner when file does not exist', async () => {
+    await executeArtifact(MOCK_IMPROVE_ITEM, tmp, {}, 1, 1, mockProvider());
     expect(ora).not.toHaveBeenCalled();
   });
 });

@@ -1,36 +1,48 @@
-# TASK.md — feat-020: Heading enforcement, correction pass, spinner
+# TASK.md — Session 12: Init redesign (canonical rewrite)
 
-## Feature ID
-feat-020
+## Feature
+feat-021 — Unified canonical rewriter + executor with per-file prompts
 
-## Sprint goal
-Fix heading drift in generated harness artifacts by (1) enforcing exact headings in system prompt, (2) adding a post-generation correction pass, and (3) showing a spinner/progress indicator during LLM calls.
+## Scope
+- New `src/init/rewriter.ts`: `rewriteToCanonical()` (handles GENERATE + IMPROVE),
+  `sanitisePlaceholders()`, per-file prompt dispatch keyed by canonical filename
+  (rules from INIT-COMMAND-PROMPTS.md), folded-in deterministic heading correction
+  and 300-line cap.
+- `src/init/executor.ts`: replace `executeGenerate`/`executeImprove` with a single
+  `executeArtifact()` that resolves sources, reads current content, rewrites via
+  `rewriteToCanonical`, sanitises, writes. Keeps ora spinner, skip/force semantics,
+  generateOnly/blank-template copy path.
+- `src/init/index.ts`: call `executeArtifact`; add `suggestNoiseCleaning()` at the
+  end of `runInit()` after re-scoring.
+- Consolidator already only shims AGENT_ENTRY_FILES — verify, no change expected.
 
-## Modules
+## Exclusions
+- Stage 3 (analyze) — not started this session.
+- No change to audit scorer beyond Module 1 (already committed).
+- generateOnly artifacts remain pure template copies (no LLM customization).
 
-### Module 1 — src/init/generator.ts (strict heading enforcement)
-- Replace SYSTEM_PROMPT with strict GENERATION_SYSTEM that has explicit HEADING RULES
-- Tests in tests/init-generator.test.ts: generated content uses new system prompt
+## Files expected to change
+- src/init/rewriter.ts (new)
+- src/init/executor.ts
+- src/init/index.ts
+- src/init/generator.ts (trim: keep loadTemplate/assertTemplateLoaded/BLANK_TEMPLATE_FILES/InitContext)
+- src/init/improver.ts (remove — subsumed by rewriter)
+- tests/init-rewriter.test.ts (new)
+- tests/init-executor.test.ts, tests/init-executor-spinner.test.ts, tests/init-generator.test.ts (retarget to new API)
 
-### Module 2 — src/init/corrector.ts (new file)
-- `findDriftedHeadings(content, template)` — fuzzy similarity, no LLM
-- `replaceHeadings(content, drifted, canonical)` — string replace, no LLM
-- `correctHeadings(content, template, filename, provider)` — deterministic + optional LLM for still-missing sections
-- Apply in executor.ts after every generate/improve call before write
-- Tests in tests/init-corrector.test.ts
+## Verification standard
+```
+npm run build && npm run typecheck && npm run lint && npm test
+```
 
-### Module 3 — ora spinner in executor.ts
-- Add `ora` dependency (record in DECISIONS.md)
-- executor.ts executeGenerate/executeImprove show spinner during LLM call
-- Spinner text updates to "Correcting headings..." before stopping
-- Tests in tests/init-executor.test.ts
+## Acceptance criteria
+- rewriteToCanonical uses exact template headings, includes existing content,
+  enforces 300-line cap, dispatches per-file prompts.
+- sanitisePlaceholders removes {{PLACEHOLDER}} text.
+- executeArtifact unifies generate/improve; suite green.
+- Noise cleanup suggestion prints at end of init.
 
-## Completion gate
-- npm run build: zero errors
-- npm run typecheck: zero errors
-- npm run lint: clean
-- npm test: all pass
-
-## Out of scope
-- Stage 3 (analyze) — do not touch
-- Any audit pipeline changes
+## Invariants
+- `src/utils/llm.ts` is the only file importing LLM SDKs.
+- `ora` stays at ^5 (CJS bundle).
+- generateOnly artifacts skip the LLM (template copy).
