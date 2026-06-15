@@ -41,6 +41,11 @@ export async function runAudit(target: string, opts: AuditOptions): Promise<void
   );
   report(scored, { json: opts.json, tokenUsage: totalTokens, remediation, planPath });
 
+  if (!opts.json && files.ignoredDuplicates.length > 0) {
+    console.log(`\nNote: ${files.ignoredDuplicates.length} legacy root duplicate(s) not scored ` +
+      `(docs/ version used instead): ${files.ignoredDuplicates.join(', ')}`);
+  }
+
   if (!opts.json) {
     const display =
       totalTokens >= 1000 ? `~${Math.ceil(totalTokens / 1000)}k` : `~${totalTokens}`;

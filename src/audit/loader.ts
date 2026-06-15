@@ -1,7 +1,7 @@
 import { join } from 'path';
 import { readFile, listDirs, listFiles, statMtime, exists, walkMdFiles } from '../utils/fs.js';
 import { findGraphifyOutput, rankGraphifyFiles } from '../utils/graphify.js';
-import { DOCS_DIR } from '../utils/layout.js';
+import { DOCS_DIR, isDocsArtifact } from '../utils/layout.js';
 
 const HARNESS_FILENAMES = [
   // Agent entry points
@@ -114,6 +114,9 @@ export interface RepoFiles {
   // Paths the mapper must keep through triage (guaranteed harness names, graph
   // matches, and collected config/manifest files) so discovery never drops them.
   seedFiles: string[];
+  // Legacy root duplicates excluded from scoring because a docs/ canonical version
+  // exists (e.g. root ARCHITECTURE.md when docs/ARCHITECTURE.md was generated).
+  ignoredDuplicates: string[];
 
   // Legacy convenience lookups used by cross-ref and tests
   agentsMd: string | null;
@@ -218,14 +221,28 @@ export function loadRepo(targetDir: string): RepoFiles {
       .filter((f): f is RepoFile => f !== null);
   }
 
-  const mdFiles = dedupeFiles([...guaranteed, ...graphFiles, ...walkedFiles, ...configFiles]);
+  const allFiles = dedupeFiles([...guaranteed, ...graphFiles, ...walkedFiles, ...configFiles]);
+
+  // Drop a legacy root duplicate when its canonical docs/ version is present, so the
+  // (often larger, stale) root copy isn't scored alongside the generated one.
+  const docsPaths = new Set(allFiles.filter((f) => f.path.startsWith(`${DOCS_DIR}/`)).map((f) => f.path));
+  const ignoredDuplicates: string[] = [];
+  const mdFiles = allFiles.filter((f) => {
+    if (f.path.includes('/') || f.name === 'README.md' || !isDocsArtifact(f.path)) return true;
+    if (docsPaths.has(`${DOCS_DIR}/${f.path}`)) {
+      ignoredDuplicates.push(f.path);
+      return false;
+    }
+    return true;
+  });
 
   // Seeds are force-kept through mapper triage so discovery never drops them.
+  const ignored = new Set(ignoredDuplicates);
   const seedFiles = [...new Set([
     ...guaranteed.map((f) => f.path),
     ...conceptMatchedFiles,
     ...configFiles.map((f) => f.path),
-  ])];
+  ])].filter((p) => !ignored.has(p));
 
   return {
     mdFiles,
@@ -234,6 +251,7 @@ export function loadRepo(targetDir: string): RepoFiles {
     guaranteedFiles: guaranteed.map((f) => f.path),
     conceptMatchedFiles,
     seedFiles,
+    ignoredDuplicates,
     agentsMd,
     architectureMd,
     constraintsMd,

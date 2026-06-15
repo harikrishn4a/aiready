@@ -10,7 +10,8 @@
     "not_started": "Work has not begun.",
     "in_progress": "Currently the active task. Only one feature may have this status.",
     "blocked": "Cannot continue until the documented blocker is resolved.",
-    "passing": "Required verification passed and evidence is recorded."
+    "passing": "Required verification passed and evidence is recorded.",
+    "unsure": "Status not determinable from the documents; needs git history / Stage 3 analyze to confirm."
   },
   "features": [
     {

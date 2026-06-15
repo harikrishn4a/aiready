@@ -9,6 +9,7 @@ export interface AuditScoreResult {
   subsystems: Record<string, number>;
   gaps: Record<string, string[]>;
   gapTriage: Array<{ subsystem: string; gap: string; category: 'human' | 'code' | 'docs' }>;
+  ignoredDuplicates: string[];
 }
 
 export async function getAuditScoreDetailed(
@@ -28,6 +29,7 @@ export async function getAuditScoreDetailed(
     subsystems: Object.fromEntries(subs.map((s) => [s, scored[s].score])),
     gaps: Object.fromEntries(subs.map((s) => [s, scored[s].gaps])),
     gapTriage,
+    ignoredDuplicates: files.ignoredDuplicates,
   };
 }
 

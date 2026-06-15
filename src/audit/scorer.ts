@@ -103,8 +103,10 @@ SCORING RULES:
 GAP CATEGORIES — tag every gap with who can resolve it:
 - "human": needs a human decision/policy, or live status only a person knows
   (e.g. team conventions, what is currently in progress, which approach to enforce)
-- "code": derivable by reading the actual source code (per-module responsibilities,
-  data flow, intent) — a later analysis stage handles these, not doc generation
+- "code": derivable by EXPLORING the codebase — reading source code (per-module
+  responsibilities, data flow, intent) OR git history (e.g. which features are actually
+  done vs unsure). A later analysis stage (Stage 3 analyze) handles these, not doc
+  generation. Use this for any feature/status reconciliation that needs git history.
 - "docs": fixable now by writing or restructuring documentation from information that
   already exists in the repo
 

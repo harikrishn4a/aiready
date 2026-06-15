@@ -169,6 +169,24 @@ describe('loadRepo — mdFiles', () => {
     expect(paths.some((p) => p.startsWith('.pytest_cache/') || p.startsWith('.venv/') || p.startsWith('graphify-out/') || p.startsWith('.aiready/'))).toBe(false);
   });
 
+  it('drops a legacy root duplicate when a docs/ canonical version exists', () => {
+    writeFileSync(join(tmp, 'ARCHITECTURE.md'), '# legacy root arch ' + 'x'.repeat(200));
+    mkdirSync(join(tmp, 'docs'), { recursive: true });
+    writeFileSync(join(tmp, 'docs', 'ARCHITECTURE.md'), '# generated arch');
+    const r = loadRepo(tmp);
+    const paths = r.mdFiles.map((f) => f.path);
+    expect(paths).toContain('docs/ARCHITECTURE.md');
+    expect(paths).not.toContain('ARCHITECTURE.md'); // root duplicate dropped
+    expect(r.ignoredDuplicates).toContain('ARCHITECTURE.md');
+  });
+
+  it('keeps the root file when no docs/ version exists', () => {
+    writeFileSync(join(tmp, 'ARCHITECTURE.md'), '# only root arch');
+    const r = loadRepo(tmp);
+    expect(r.mdFiles.map((f) => f.path)).toContain('ARCHITECTURE.md');
+    expect(r.ignoredDuplicates).toEqual([]);
+  });
+
   it('skips node_modules directory', () => {
     mkdirSync(join(tmp, 'node_modules', 'some-pkg'), { recursive: true });
     writeFileSync(join(tmp, 'node_modules', 'some-pkg', 'README.md'), '# Package');

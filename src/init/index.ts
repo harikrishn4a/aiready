@@ -74,13 +74,8 @@ function printScoreDelta(
     const a = afterSubs[sub] ?? 0;
     const d = a - b;
     const sign2 = d > 0 ? '+' : d < 0 ? '' : ' ';
-    // Find artifacts that affect this subsystem
-    const changed = artifacts
-      .filter((art) => art.subsystem === sub && art.action !== 'skip')
-      .map((art) => art.filename)
-      .join(', ');
-    const note = changed ? `  ${changed}` : d === 0 ? '  unchanged' : '';
-    console.log(`  ${sub.padEnd(14)} ${String(b).padStart(3)} → ${String(a).padEnd(3)}  ${sign2}${Math.abs(d)}${note}`);
+    const note = summariseSubsystemWork(sub, artifacts) || (d === 0 ? 'unchanged' : '');
+    console.log(`  ${sub.padEnd(14)} ${String(b).padStart(3)} → ${String(a).padEnd(3)}  ${sign2}${Math.abs(d)}  ${note}`);
   }
 
   if (delta > 0) {
@@ -91,6 +86,18 @@ function printScoreDelta(
     console.log('\nScore decreased. Generated files may need manual review.');
   }
   console.log(sep);
+}
+
+// Concise per-subsystem summary of what init did: "added X, Y" (generated) and/or
+// "restructured Z" (improved). Filenames in full — never ellipsis-truncated.
+function summariseSubsystemWork(subsystem: string, artifacts: ArtifactPlan[]): string {
+  const mine = artifacts.filter((a) => a.subsystem === subsystem && a.action !== 'skip');
+  const added = mine.filter((a) => a.action === 'generate').map((a) => a.filename);
+  const restructured = mine.filter((a) => a.action === 'improve').map((a) => a.filename);
+  const parts: string[] = [];
+  if (added.length) parts.push(`added ${added.join(', ')}`);
+  if (restructured.length) parts.push(`restructured ${restructured.join(', ')}`);
+  return parts.join('; ');
 }
 
 // Agent entry files are consolidated into shims, not removed — never suggest them.
@@ -141,35 +148,25 @@ const TRIAGE_LABELS: Array<{ category: 'human' | 'code' | 'docs'; heading: strin
   { category: 'docs', heading: 'STAGE 2 CAN ADDRESS (documentation):' },
 ];
 
-function printRemainingGaps(
-  afterSubs: Record<string, number>,
-  triage: AuditScoreResult['gapTriage'],
-): void {
-  const subsystems = ['identity', 'verification', 'state', 'memory', 'constraints'];
-  const below100 = subsystems.filter((s) => (afterSubs[s] ?? 0) < 100);
-  if (below100.length === 0) return;
+function printRemainingGaps(result: AuditScoreResult): void {
+  const triage = result.gapTriage;
+  if (triage.length === 0) return;
 
   const sep = '─'.repeat(52);
   console.log(`\n${sep}`);
   console.log("REMAINING GAPS — why the score isn't 100");
   console.log(sep);
-  for (const sub of subsystems) {
-    console.log(`  ${sub.padEnd(13)} ${String(afterSubs[sub] ?? 0).padStart(3)}`);
-  }
 
-  if (triage.length > 0) {
-    console.log('');
-    for (const { category, heading } of TRIAGE_LABELS) {
-      const items = triage.filter((g) => g.category === category);
-      if (items.length === 0) continue;
-      console.log(`  ${heading}`);
-      for (const item of items) {
-        console.log(`    • [${item.subsystem}] ${item.gap}`);
-      }
+  for (const { category, heading } of TRIAGE_LABELS) {
+    const items = triage.filter((g) => g.category === category);
+    if (items.length === 0) continue;
+    console.log(`\n  ${heading}`);
+    for (const item of items) {
+      console.log(`    • [${item.subsystem}] ${item.gap}`);
     }
-    console.log('\n  → human items are yours to fill; code items are for `npx aiready analyze` (Stage 3).');
   }
 
+  console.log('\n  → human items are yours to fill; code items are for `npx aiready analyze` (Stage 3).');
   console.log(`\n${SCORING_DISCLOSURE}`);
   console.log(sep);
 }
@@ -276,7 +273,12 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
 
   printScoreDelta(scoreBefore, scoreAfter, beforeSubs, scoreAfterResult.subsystems, plan.artifacts);
 
-  printRemainingGaps(scoreAfterResult.subsystems, scoreAfterResult.gapTriage);
+  if (scoreAfterResult.ignoredDuplicates.length > 0) {
+    console.log(`\nNote: ${scoreAfterResult.ignoredDuplicates.length} legacy root duplicate(s) not scored ` +
+      `(docs/ version used instead): ${scoreAfterResult.ignoredDuplicates.join(', ')}`);
+  }
+
+  printRemainingGaps(scoreAfterResult);
 
   suggestNoiseCleaning(plan);
 
