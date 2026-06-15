@@ -39,6 +39,8 @@ aiready graph --backend claude --model <id>     # or choose a specific backend/m
 
 > graphify analyses **code fully locally** (no LLM needed); **docs, PDFs, and images** need an LLM, which it runs with the API key from your `.env` (step 2). It auto-detects the backend from your key, or you can pick one with `--backend` (`claude` / `openai` / `gemini` / `ollama`) and `--model`.
 >
+> `aiready graph` installs graphify **with the LLM SDK matching your key** (e.g. `graphifyy[anthropic]`) into graphify's own isolated environment — your project's virtualenv doesn't affect it.
+>
 > If this step fails or you skip it, that's fine — see step 4.
 
 **4. Audit** — score the repo and write a gap analysis to `plan/plan.md`.
