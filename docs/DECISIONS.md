@@ -261,3 +261,13 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Only raise the blob cap — entry files still dominate ordering. Stop mapping AGENTS.md to multiple subsystems — loses genuinely useful inline content.
 - **Constraints introduced**: Total scoring prompt grows with file count; bounded by the 6000/file and 16000/subsystem caps.
 - **Revisit when**: Very large repos push the scoring prompt past model context limits.
+
+---
+
+### 2026-06-15: OpenTelemetry CLI usage telemetry + offline npm download metrics
+
+- **Decision**: Wrap the published bin with `cli-opentelemetry` (`dist/telemetry-bin.js` → spawns `dist/cli.js`). Add a maintainer-only `scripts/download-metrics.mjs` using `npm-stats-api` (devDependency) and `npm run metrics:downloads`.
+- **Reason**: Vendor-neutral OTLP usage telemetry at the binary entry point without polluting command logic. Download counts come from the public npm registry API on a schedule, not at CLI runtime.
+- **Rejected alternatives**: `@segment/analytics-node` / `insight` — maintenance-mode, platform-locked. In-process download tracking — impossible for npx/global installs and adds runtime overhead.
+- **Constraints introduced**: `cli-opentelemetry` is a production dependency; users can opt out via `CLI_OPEN_TELEMETRY_DISABLE=1`. OTLP endpoint defaults to `http://localhost:4318/v1/traces` unless `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` is set. Telemetry timeout defaults to 60 minutes for long LLM commands.
+- **Revisit when**: A hosted OTLP endpoint is chosen for production — document the recommended env vars in README and optionally enable by default in CI publish docs.

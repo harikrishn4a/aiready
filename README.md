@@ -2,7 +2,7 @@
 
 **Audit any repository for AI-agent readiness, then generate the harness that makes coding agents effective.**
 
-`aiready` scores how well a repo is set up for AI coding agents across five subsystems — **identity, verification, state, memory, and constraints** — using intent-based LLM scoring ("can an agent actually do its job with only what's documented here?"). It then generates the missing harness artifacts, customised to your stack. Whether you're starting fresh or working in a messy, half-documented project, aiready gives you a first draft of the harness suited to your build — for you to review and refine along the way.
+`aiready` scores how well a repo is set up for AI coding agents across five subsystems — identity, verification, state, memory, and constraints — using intent-based LLM scoring ("can an agent actually do its job with only what's documented here?"). Then it generates the missing harness artifacts (markdown files and docs), customised to your stack. Whether you are starting a new project, or in the middle of a messy project, aiready is meant to give a first draft of the harness artifacts suited to your build, for you to review and modify along the way.
 
 Its content and structure are based on the lessons in [walkinglabs/learn-harness-engineering](https://github.com/walkinglabs/learn-harness-engineering).
 
@@ -13,59 +13,51 @@ A good harness pays for itself every session:
 - **Less setup churn** — agents orient in seconds instead of re-discovering the project each time.
 - **Fewer integration errors** — a single documented verify command and explicit MUST/MUST NOT constraints stop agents from running commands that don't exist or breaking rules they couldn't have known.
 - **Context that survives** — `PROGRESS.md`, `SESSION-HANDOFF.md`, and an architecture map keep state across **sessions, teammates, and different agents**.
-- **One source of truth for every agent** — Claude Code, Cursor, Codex, and Windsurf all read the same harness; their entry files become thin shims pointing at it.
+- **One source of truth for every agent** — Claude Code, Cursor, Codex, and Windsurf all read the same harness (their entry files become thin shims pointing at it).
 
 ## Quick start
 
-**1. Install**
-
+Step 1:
 ```bash
 npm install -g @sicilianwildcat/aiready
 ```
 
-**2. Add an API key** (skip if your repo already has one). Copy this into your `.env` and fill in either key:
+Step 2: Add an api key for either OpenAI / Anthropic if absent in your repo.
+
+Copy this to your .env, and fill in the api keys.
 
 ```bash
 OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 ```
 
-**3. Build the repo graph** (recommended) — aiready uses [graphify](https://graphify.net) to map your codebase. `aiready graph` installs graphify automatically if it's missing.
+Step 3: Generate repo graph
+- choose the model of your preferance (recommended: Claude Sonnet / Opus / GPT 5.5)
+- aiready leverages graphify to generate this graph.
 
 ```bash
-aiready graph                                   # uses whichever key you set in step 2
-aiready graph --backend claude --model <id>     # or choose a specific backend/model
+aiready graph
 ```
 
-> graphify analyses **code fully locally** (no LLM needed); **docs, PDFs, and images** need an LLM, which it runs with the API key from your `.env` (step 2). It auto-detects the backend from your key, or you can pick one with `--backend` (`claude` / `openai` / `gemini` / `ollama`) and `--model`.
->
-> `aiready graph` installs graphify **with the LLM SDK matching your key** (e.g. `graphifyy[anthropic]`) into graphify's own isolated environment — your project's virtualenv doesn't affect it.
->
-> If this step fails or you skip it, that's fine — see step 4.
-
-**4. Audit** — score the repo and write a gap analysis to `plan/plan.md`.
-
+Step 4: Audit the repo
+- aiready scores the repo and generates gap analysis in plan/plan.md
 ```bash
-aiready audit
+aiready audit              
 ```
 
-> The graph is **recommended, not required**. With it, source discovery is semantically ranked. Without it, `aiready audit` falls back to a content scan of your markdown and config files — it still works, but discovery is less precise and may miss or mis-rank sources.
+Step 5: Initialise artifacts
+- aiready generates custom artifacts to strengthen your harness based on docs available in your repo
+- if existing entry point files (AGENTS.md / CLAUDE.md / cursor / windurf) are present, init reorganises content from these files to AGENTS.md, and points other entry files to AGENTS.md
+- init is meant to create template artifacts based on the content and context available in your repo, doesn't do a deep dive into the code base to generate module level docs, that is deferred to analyze stage under development.
 
-**5. Initialise artifacts** — generate the harness from the context already in your repo.
-
-```bash
-aiready init
+```bash 
+aiready init        
 ```
+- As score of 70 - 80 is considered ideal for this stage, for it to be considered a well crafted harness as init merely reorganises context found in artifacts from identified source files. The actual code exploration is deffered to analyse stage which is currently underdevelopment, to ensure that the harness can be strengthened with semantic understanding of code.  
+- LLM calls are not deterministic, but are stabilised to provide reliable scoring. A +- 5 between calls is expected, and normal.
 
-- Generates canonical artifacts tailored to your stack from the source files aiready identifies.
-- If entry-point files already exist (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`), `init` consolidates their content into `AGENTS.md` and points the others at it.
-- `init` reorganises the context found in your repo into a clean first draft — it does **not** deep-dive the code to write module-level docs. That semantic code exploration is deferred to the `analyze` stage (in development).
 
-A score of **70–80 after `init` is the healthy target** for this stage: `init` is reorganising context from identified source files, not reading the code. The remaining points come from the `analyze` stage, which will strengthen the harness with a semantic understanding of the code.
-
-> Scores are LLM judgements, not fixed metrics. Calls are stabilised for reliability, but a **±5 swing between runs is expected and normal**.
-
-`audit` writes the plan to `plan/plan.md`. `init` writes canonical docs under `docs/`, keeps entry points and build files (`Makefile`, `scripts/`) at the root, and prints a before→after score with each remaining gap triaged into **you fix it**, **a later stage fixes it**, or **done**.
+`audit` writes a plan to `plan/plan.md`. `init` writes canonical docs under `docs/`, keeps entry points (`AGENTS.md`, `CLAUDE.md`, `.cursorrules`, `.windsurfrules`) and build files at the root, and prints a before→after score with each remaining gap triaged into **you fix it**, **a later stage fixes it**, or **done**.
 
 <sub>**In development** — not yet available:</sub>
 > <sub>`aiready analyze` · reads your code + graph to document undocumented intent</sub>
@@ -75,45 +67,24 @@ A score of **70–80 after `init` is the healthy target** for this stage: `init`
 ## How it works
 
 ```
-                      ┌─────────────────────────────────────────┐
-   your repo  ──────► │  aiready graph   (wraps graphify)        │ ──► graphify-out/
-                      │  builds a local knowledge graph          │     graph.json
-                      │  — recommended, not required —           │
-                      └─────────────────────────────────────────┘
-                                        │  semantic map of code + docs
-                                        ▼  (audit also runs without it: content-scan fallback)
-                      ┌─────────────────────────────────────────┐
-                      │  aiready audit                           │
-                      │  1. discover sources (graph + content    │ ──► plan/plan.md
-                      │     scan — by what files contain)        │     • 5 subsystem scores
-                      │  2. score 5 subsystems with the LLM      │     • gap triage
-                      └─────────────────────────────────────────┘
-                                        │
-                                        ▼
-                      ┌─────────────────────────────────────────┐
-   AGENTS.md  ◄────── │  aiready init                            │ ──► docs/
-   (root, + shims for │  generate canonical harness artifacts    │     PROGRESS · SESSION-HANDOFF
-    CLAUDE/cursor/…)  │  from the discovered sources             │     ARCHITECTURE · CONSTRAINTS
-   Makefile, scripts ◄┤  + before→after score & gap triage       │     features · structure · …
-                      └─────────────────────────────────────────┘
-
-   subsystems scored:  identity · verification · state · memory · constraints
+audit → plan/plan.md → init → docs/ + root entry points + Makefile/scripts
 ```
 
-### How the graph powers the audit
-
-graphify turns your repo — code, schemas, docs — into a queryable **knowledge graph**, all locally (your code never leaves your machine). aiready uses that graph to **discover which files are relevant to each harness subsystem** and rank them, so the scorer reads the *right* sources (your real `requirements.txt`, `FEATURE_PLAN.md`, CI config, architecture notes) rather than guessing from filenames. It's combined with a content-based scan, so:
-
-- **With a graph** — richer, semantically-ranked source discovery.
-- **Without one** — aiready still works, falling back to a content scan of your markdown and config files.
-
-That's why `aiready graph` is step 3: a better map means a more accurate score and a better-targeted harness.
-
-### Principles
-
-- **Discovery is content-based**, not name-based — it finds your real sources by what they contain.
-- **Nothing is overwritten** without `--force`, and source files are never modified — `init` extracts from them and *suggests* (never performs) cleanup.
+- **Discovery is content-based**, not name-based — it finds your real sources (`requirements.txt`, `FEATURE_PLAN.md`, CI configs, Dockerfile) by what they contain.
+- **Nothing is overwritten** without `--force`, and source files are never modified — `init` extracts from them and suggests (never performs) cleanup.
 - **Scores are LLM judgements**, so they vary slightly between runs and models — use them as direction, not a fixed metric.
+
+## Telemetry
+
+aiready collects anonymous usage data (command run, OS, duration, success or failure) to help improve the tool.
+
+**To opt out**, set this before running any command:
+
+```bash
+export CLI_OPEN_TELEMETRY_DISABLE=1
+```
+
+Add that to your shell profile if you want it permanent.
 
 ## License
 

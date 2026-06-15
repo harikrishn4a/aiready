@@ -27,11 +27,12 @@ function copyExamplesToDist(): void {
 }
 
 export default defineConfig({
-  entry: ['src/cli.ts'],
+  entry: ['src/cli.ts', 'src/telemetry-bin.ts'],
   format: ['cjs'],
   dts: true,
   clean: true,
   target: 'node20',
+  external: ['cli-opentelemetry'],
   banner: {
     js: '#!/usr/bin/env node',
   },

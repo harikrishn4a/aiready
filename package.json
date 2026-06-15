@@ -31,7 +31,7 @@
     "dist"
   ],
   "bin": {
-    "aiready": "./dist/cli.js"
+    "aiready": "./dist/telemetry-bin.js"
   },
   "scripts": {
     "build": "tsup",
@@ -39,17 +39,20 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/",
     "test": "vitest run",
-    "dev": "tsup --watch"
+    "dev": "tsup --watch",
+    "metrics:downloads": "node scripts/download-metrics.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.100.1",
     "@inquirer/prompts": "^7.10.1",
+    "cli-opentelemetry": "^1.2.3",
     "commander": "^12.0.0",
     "dotenv": "^17.4.2",
     "openai": "^6.42.0",
     "ora": "^5.4.1"
   },
   "devDependencies": {
+    "npm-stats-api": "^2.1.2",
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
