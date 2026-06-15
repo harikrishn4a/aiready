@@ -63,7 +63,23 @@
 | `npm run build` | pass — dist/cli.js ~104 KB |
 | `npm run typecheck` | pass |
 | `npm run lint` | pass |
-| `npm test` | pass — 352/352 (26 test files) |
+| `npm test` | pass — 357/357 (26 test files) |
+
+## feat-023 follow-up fixes (from betterworld REMAINING GAPS analysis)
+- Scorer reads non-markdown harness artifacts (Makefile, scripts/*, feature_list.json)
+  and prepends them — verification no longer blind to a generated Makefile (was
+  dropping 72→52, now ~85). See `NON_MD_HARNESS` in scorer.ts.
+- Generation `maxTokens` 2048→4096 (rewriter) — AGENTS.md/CONSTRAINTS.md no longer
+  truncated mid-section.
+- Scoring `maxTokens` 4096 + output-verbosity caps + retry-on-unparseable — fixes the
+  all-zero "LLM did not score this subsystem" failure (JSON truncation).
+- Stack-aware files: prompt names the repo + `stripRepoPrefix()` removes `cd <repo> &&`
+  and `<repo>/`. Makefile recipes verified clean on betterworld.
+- KNOWN: init does NOT run a quality/correction loop — only deterministic fixups
+  (heading rename, Makefile tabs, placeholder sanitise, docs-links, repo-prefix strip).
+  A truncation/missing-section re-generation loop is a candidate next feature.
+- KNOWN minor: non-stack-aware docs (CONSTRAINTS.md/structure.md) may still echo a
+  `betterworld/` path prefix from source docs; only stack-aware files are prefix-stripped.
 
 ## Live smoke (./betterworld, Anthropic Sonnet — claude-sonnet-4-6)
 - `audit` twice on the unchanged repo → 46 then 43 (~3pt variance, was ~14pt on

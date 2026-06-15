@@ -1,8 +1,8 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js ~110 KB (full pipeline + Stage 2 bundled)
-- Tests: 352/352 passing (26 test files)
+- Build: passing — dist/cli.js ~115 KB (full pipeline + Stage 2 bundled)
+- Tests: 357/357 passing (26 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-15
@@ -59,6 +59,15 @@
   (6000) not per-blob (3000) so docs/ artifacts aren't crowded out by AGENTS.md
   (betterworld standalone audit 49→81). CLI: numbered critical gaps, REMAINING GAPS
   section after init re-score, non-determinism disclosure in audit+init.
+- [x] **feat-023 follow-ups** — Surfaced by betterworld REMAINING GAPS:
+  (1) scorer now reads non-markdown harness files (Makefile/scripts/feature_list.json)
+  and prepends them, so verification is no longer blind to a generated Makefile
+  (52→~85). (2) generation maxTokens 2048→4096 — generated AGENTS.md/CONSTRAINTS.md no
+  longer truncated mid-section. (3) scoring maxTokens 4096 + retry-on-empty + output
+  verbosity caps — fixes all-zero "LLM did not score" from JSON truncation.
+  (4) stack-aware files: prompt names the repo + deterministic stripRepoPrefix() —
+  Makefile recipes clean (0 `cd <repo>` / `<repo>/`). Note: init does NOT run a
+  quality correction loop (deterministic heading/tab/placeholder/docs-link fixups only).
 
 ## Backlog — Stage 1
 
