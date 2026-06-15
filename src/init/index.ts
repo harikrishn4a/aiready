@@ -99,21 +99,26 @@ const AGENT_ENTRY_FILES = new Set([
   '.github/copilot-instructions.md',
 ]);
 
-function suggestNoiseCleaning(plan: InitPlan): void {
+export function collectNoiseCandidates(plan: InitPlan): string[] {
   const canonicalFilenames = new Set(CANONICAL_ARTIFACTS.map((a) => a.filename));
   const sourcesUsed = new Set(plan.artifacts.flatMap((a) => a.sourceFiles));
 
-  const noiseCandidates = [...sourcesUsed].filter((f) => {
+  return [...sourcesUsed].filter((f) => {
+    // Only ever suggest removing MARKDOWN docs whose content was absorbed. Config,
+    // manifests, CI, Dockerfiles, scripts, lockfiles etc. are real project files —
+    // never suggest deleting them just because they were read as sources.
+    if (!f.endsWith('.md')) return false;
     if (canonicalFilenames.has(f)) return false;   // keep canonical files
     if (AGENT_ENTRY_FILES.has(f)) return false;     // shimmed, not noise
-    if (f === 'README.md') return false;            // never suggest removing README
+    if (f === 'README.md' || f.endsWith('/README.md')) return false; // never suggest removing READMEs
     if (f.startsWith('.aiready/')) return false;    // keep legacy aiready files
     if (f.startsWith(`${PLAN_DIR}/`)) return false; // keep the plan folder
-    if (f === 'package.json') return false;         // build manifest, not noise
-    if (f.startsWith('scripts/')) return false;     // keep scripts
-    if (f.startsWith('change_logs/')) return true;  // changelog files are candidates
-    return true;                                    // other non-canonical sources
+    return true;                                    // other non-canonical markdown docs
   });
+}
+
+function suggestNoiseCleaning(plan: InitPlan): void {
+  const noiseCandidates = collectNoiseCandidates(plan);
 
   if (noiseCandidates.length === 0) return;
 
