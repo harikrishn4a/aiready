@@ -1,8 +1,8 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js ~117 KB (full pipeline + Stage 2 bundled)
-- Tests: 358/358 passing (26 test files)
+- Build: passing — dist/cli.js ~120 KB (full pipeline + Stage 2 bundled)
+- Tests: 368/368 passing (27 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-15
@@ -79,8 +79,18 @@
   dirs. remediation prioritises + caps subsystem sources to 12. isPlanPath no longer
   matches a user's root plan.md. Verified on betterworld: FEATURE_PLAN.md/requirements.txt/
   Dockerfile/Makefile/pytest.ini now discovered into the right subsystems.
-- [ ] Phase B — non-verbatim feature artifacts (features.md/feature_list.json from sources).
-- [ ] Phase C — gap triage (human / Stage-3-code / Stage-2 categories in plan.md + CLI).
+- [x] **Phase B — non-verbatim feature artifacts.** features.md + feature_list.json are
+  now subsystem 'state', generateOnly:false, generated from discovered FEATURE_PLAN/
+  ROADMAP/PROGRESS sources. JSON-aware rewrite path validates with JSON.parse and falls
+  back to template on invalid JSON. Verified: betterworld feature_list.json now has 5
+  real features (F1/F2 etc.) from FEATURE_PLAN.md, honest not_started status.
+- [x] **Phase C — gap triage.** Scorer tags each gap human|code|docs; plan/plan.md gets
+  a `## GAP TRIAGE` section; audit + init CLI print grouped triage (human → user,
+  code → Stage 3 analyze, docs → Stage 2). getAuditScoreDetailed returns gapTriage.
+- [x] **Noise-cleanup fix.** suggestNoiseCleaning only ever suggests absorbed markdown
+  docs — never config/manifest/CI/Dockerfile/scripts (Phase A made those sources).
+- Live betterworld (Sonnet): audit 48 → init 82 (+34); state 35→82 (features.md/
+  feature_list.json now contribute); gap triage shown in both commands.
 
 ## Backlog — Stage 1
 
