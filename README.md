@@ -22,6 +22,8 @@ Step 1:
 npm install -g @sicilianwildcat/aiready
 ```
 
+Already installed? See [Updating](#updating) to pull the latest release.
+
 Step 2: Add an api key for either OpenAI / Anthropic if absent in your repo.
 
 Copy this to your .env, and fill in the api keys.
@@ -63,6 +65,29 @@ aiready init
 > <sub>`aiready analyze` · reads your code + graph to document undocumented intent</sub>
 > <sub>`aiready drift` · finds harness docs that have gone stale vs git history</sub>
 > <sub>`aiready fix` · patches exactly what's wrong, with a diff before writing</sub>
+
+## Updating
+
+After a new release, update your global install:
+
+```bash
+npm install -g @sicilianwildcat/aiready@latest
+```
+
+Or:
+
+```bash
+npm update -g @sicilianwildcat/aiready
+```
+
+Check what's installed:
+
+```bash
+aiready --version
+npm list -g @sicilianwildcat/aiready
+```
+
+aiready also prints an update notice when a newer version is available on npm.
 
 ## How it works
 
