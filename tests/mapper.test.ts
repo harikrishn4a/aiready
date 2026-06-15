@@ -82,7 +82,8 @@ describe('mapFiles — basic behaviour', () => {
     expect(byPath.get('CHECKPOINT.md')).toContain('state');
     expect(byPath.get('DESIGN.md')).toContain('memory');
     expect(byPath.get('CLAUDE.md')).toContain('constraints');
-    expect(provider.chat).toHaveBeenCalledTimes(1);
+    // triage (empty) + a classify fallback pass; content signals still map everything
+    expect(provider.chat).toHaveBeenCalledTimes(2);
   });
 
   it('calls provider.chat with fast: true on both stages', async () => {
@@ -95,11 +96,12 @@ describe('mapFiles — basic behaviour', () => {
     expect(provider.chat).toHaveBeenNthCalledWith(2, expect.any(String), expect.any(String), { fast: true, temperature: 0, seed: 7 });
   });
 
-  it('returns empty array when triage finds no relevant files', async () => {
+  it('returns empty array when nothing is harness-relevant (no signals, no mappings)', async () => {
     const provider = makeProvider(JSON.stringify({ relevant: [] }));
     const result = await mapFiles([makeFile('LICENSE.md')], provider);
     expect(result).toEqual([]);
-    expect(provider.chat).toHaveBeenCalledTimes(1);
+    // triage runs, then a classify fallback over the (still irrelevant) file
+    expect(provider.chat).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -148,13 +150,18 @@ describe('mapFiles — prompt content', () => {
     expect(classifyMsg).not.toContain('line-51');
   });
 
-  it('skips triage and goes straight to classify when usedGraphify is true', async () => {
+  it('classifies force-kept (seed) files even when triage omits them', async () => {
     const provider = makeProvider(
-      JSON.stringify({ mappings: [{ path: 'AGENTS.md', subsystems: ['identity'] }] }),
+      JSON.stringify({ relevant: [] }), // triage drops everything
+      JSON.stringify({ mappings: [{ path: 'requirements.txt', subsystems: ['identity'] }] }),
     );
-    const result = await mapFiles([makeFile('AGENTS.md')], provider, true);
-    expect(provider.chat).toHaveBeenCalledTimes(1); // classify only, no triage
-    expect(result[0]?.path).toBe('AGENTS.md');
+    const result = await mapFiles(
+      [makeFile('requirements.txt', 'fastapi==0.1')],
+      provider,
+      { forceKeep: ['requirements.txt'] },
+    );
+    expect(provider.chat).toHaveBeenCalledTimes(2); // triage + classify
+    expect(result[0]?.path).toBe('requirements.txt');
     expect(result[0]?.subsystems).toContain('identity');
   });
 });

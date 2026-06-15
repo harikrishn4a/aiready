@@ -44,6 +44,9 @@ export function statMtime(filePath: string): Date | null {
 const SKIP_DIRS = new Set([
   'node_modules', '.git', 'dist', 'build', 'coverage', '.next', '.nuxt',
   '__pycache__', '.cache', 'vendor', 'tmp', '.tmp',
+  '.pytest_cache', '.mypy_cache', '.ruff_cache', '.venv', 'venv', 'htmlcov',
+  '.idea', '.vscode', 'site-packages', '.tox',
+  'graphify-out', '.graphify', '.aiready',  // tool outputs — not repo content
 ]);
 
 export interface MdFileEntry {

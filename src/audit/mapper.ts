@@ -9,33 +9,41 @@ export interface FileMapping {
 }
 
 const TRIAGE_SYSTEM = `You are a repository analyst. Given a list of files with short previews,
-identify which files could plausibly serve as harness artifacts for AI
-coding agents.
+identify which files could plausibly serve as a source for an AI coding
+agent's harness — by their CONTENT, regardless of filename.
 
-Harness artifacts include: agent instructions, project progress tracking,
-architecture documentation, constraints or rules, session state,
-design decisions.
+Relevant content includes: agent instructions; project purpose/overview;
+dependency MANIFESTS and stack/version info (e.g. requirements.txt,
+package.json, pyproject.toml, go.mod, Cargo.toml); build/test/CI config
+(Makefile, Dockerfile, CI workflows, test configs); progress / roadmap /
+feature plans / status / session state; architecture or module maps;
+constraints or rules; design decisions.
 
-Exclude: changelogs, license files, generated API docs, package readmes,
-dependency documentation, test fixtures, lock files.
+Exclude only: lock files, secrets/.env, binaries, license files, generated
+API docs, and test fixtures.
 
 Respond with valid JSON only:
-{ "relevant": ["path/to/file.md", ...] }`;
+{ "relevant": ["path/to/file", ...] }`;
 
-const MAPPER_SYSTEM = `You are classifying repository markdown files by AI agent harness subsystem.
+const MAPPER_SYSTEM = `You are classifying repository files (markdown docs, dependency manifests,
+and build/CI config) by AI agent harness subsystem, based on their CONTENT.
 
 There are exactly 5 subsystems:
-- identity: File describes what the project is, its purpose, stack, version, or high-level structure
-- verification: File contains commands to build/test/validate work, CI configuration, or runbooks
-- state: File tracks current progress, session state, what is done, blocked, or next
-- memory: File maps the architecture, module responsibilities, file structure, or code navigation
-- constraints: File defines rules agents must follow, using MUST or MUST NOT language
+- identity: what the project is, its purpose, tech stack, or pinned dependency
+  versions. Dependency manifests (package.json, requirements.txt, pyproject.toml,
+  go.mod, Cargo.toml, pubspec.yaml, …) belong here — they carry the stack/versions.
+- verification: how to build/test/validate work — Makefile, scripts, CI workflows,
+  Dockerfile, test configs (pytest.ini, tox.ini), or documented run commands
+- state: current progress, session state, roadmaps, feature plans, what is done,
+  blocked, or next
+- memory: architecture, module responsibilities, file structure, or code navigation
+- constraints: rules agents must follow, using MUST / MUST NOT language
 
-For each file provided (path and first 200 characters), return which subsystems it belongs to.
+For each file provided (path and preview), return which subsystems it belongs to.
 A file can belong to multiple subsystems. Omit files with no harness relevance.
 
 Return ONLY valid JSON with no explanation:
-{"mappings":[{"path":"file.md","subsystems":["identity"]}]}`;
+{"mappings":[{"path":"file","subsystems":["identity"]}]}`;
 
 interface TriageResponse {
   relevant: string[];
@@ -179,24 +187,24 @@ async function classifyFiles(
   return parseMapperResponse(text);
 }
 
+export interface MapOptions {
+  /** Paths always sent to classification, even if triage omits them (seeds). */
+  forceKeep?: string[];
+}
+
 export async function mapFiles(
-  mdFiles: RepoFile[],
+  files: RepoFile[],
   provider: LLMProvider,
-  usedGraphify = false,
+  opts: MapOptions = {},
 ): Promise<FileMapping[]> {
-  if (mdFiles.length === 0) return [];
+  if (files.length === 0) return [];
 
-  // Graphify already selected a semantic subset — skip triage
-  if (usedGraphify) {
-    return augmentMappingsWithContentSignals(mdFiles, await classifyFiles(mdFiles, provider));
-  }
+  // Triage always runs to bound the (now wide) candidate set, but seed files are
+  // force-kept so a relevant manifest / feature doc is never dropped by triage.
+  const forceKeep = new Set(opts.forceKeep ?? []);
+  const triageRelevant = new Set(await triageFiles(files, provider));
+  const toClassify = files.filter((f) => triageRelevant.has(f.path) || forceKeep.has(f.path));
+  const classifySet = toClassify.length > 0 ? toClassify : files;
 
-  const relevantPaths = await triageFiles(mdFiles, provider);
-  if (relevantPaths.length === 0) return augmentMappingsWithContentSignals(mdFiles, []);
-
-  const pathSet = new Set(relevantPaths);
-  const relevantFiles = mdFiles.filter((f) => pathSet.has(f.path));
-  if (relevantFiles.length === 0) return augmentMappingsWithContentSignals(mdFiles, []);
-
-  return augmentMappingsWithContentSignals(mdFiles, await classifyFiles(relevantFiles, provider));
+  return augmentMappingsWithContentSignals(files, await classifyFiles(classifySet, provider));
 }

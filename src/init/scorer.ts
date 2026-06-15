@@ -16,7 +16,7 @@ export async function getAuditScoreDetailed(
 ): Promise<AuditScoreResult> {
   const targetDir = resolve(target);
   const files = loadRepo(targetDir);
-  const mappings = await mapFiles(files.mdFiles, provider, files.usedGraphify);
+  const mappings = await mapFiles(files.mdFiles, provider, { forceKeep: files.seedFiles });
   const scored = await scoreRepo(files, mappings, provider);
   const subs = ['identity', 'verification', 'state', 'memory', 'constraints'] as const;
   return {

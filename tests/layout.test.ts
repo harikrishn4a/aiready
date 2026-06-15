@@ -34,10 +34,10 @@ describe('isDocsArtifact', () => {
 });
 
 describe('isPlanPath', () => {
-  it('recognises new and legacy plan locations', () => {
+  it('recognises aiready plan locations but not a user-authored root plan.md', () => {
     expect(isPlanPath('plan/plan.md')).toBe(true);
-    expect(isPlanPath('plan.md')).toBe(true);
     expect(isPlanPath('.aiready/plan.md')).toBe(true);
+    expect(isPlanPath('plan.md')).toBe(false); // user's own file — valid source
     expect(isPlanPath('docs/PROGRESS.md')).toBe(false);
   });
 });

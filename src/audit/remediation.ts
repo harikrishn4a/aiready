@@ -90,6 +90,26 @@ function readArtifact(target: string, filename: string): string {
   return '';
 }
 
+// Deprioritise high-volume/low-signal locations when capping source lists.
+const LOW_PRIORITY_PREFIXES = ['change_logs/', 'test_results/', 'frontend/'];
+const MAX_SUBSYSTEM_SOURCES = 12;
+
+function sourcePriority(f: string): number {
+  if (LOW_PRIORITY_PREFIXES.some((p) => f.startsWith(p))) return 2; // changelogs, test output
+  if (f.includes('/')) return 1;                                    // nested (docs/, scripts/, .github/)
+  return 0;                                                         // root: manifests, FEATURE_PLAN, AGENTS
+}
+
+/** Drop plan files, dedupe, prioritise high-signal paths, and cap the list length. */
+function prioritizeSources(files: string[], limit = MAX_SUBSYSTEM_SOURCES): string[] {
+  return [...new Set(files)]
+    .filter((f) => !isPlanFile(f))
+    .map((f, i) => ({ f, i }))
+    .sort((a, b) => sourcePriority(a.f) - sourcePriority(b.f) || a.i - b.i)
+    .slice(0, limit)
+    .map((x) => x.f);
+}
+
 function hasUsefulContent(target: string, file: string): boolean {
   const filePath = join(target, file);
   if (!existsSync(filePath)) return false;
@@ -323,7 +343,7 @@ function usefulSourcesForArtifact(
     ? subsystemData.files.filter((f) => f !== def.filename && hasUsefulContent(target, f))
     : [];
   const defaults = def.defaultSources.filter((f) => f !== def.filename && hasUsefulContent(target, f));
-  return [...new Set([...subsystemFiles, ...defaults])];
+  return prioritizeSources([...subsystemFiles, ...defaults]);
 }
 
 function mentionsOtherCanonicalArtifact(gap: string, def: CanonicalArtifactDef): boolean {
@@ -402,7 +422,7 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
   for (const subsystem of ['identity', 'verification', 'state', 'memory', 'constraints'] as const) {
     const data = scored[subsystem];
     subsystemScores[subsystem] = data.score;
-    subsystemSources[subsystem] = data.files.filter((f) => !isPlanFile(f));
+    subsystemSources[subsystem] = prioritizeSources(data.files);
   }
 
   for (const def of CANONICAL_ARTIFACTS) {

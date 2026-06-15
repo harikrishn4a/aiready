@@ -146,11 +146,27 @@ describe('loadRepo — mdFiles', () => {
     expect(readme?.fullContent).toBe(content);
   });
 
-  it('does not include non-.md files in mdFiles', () => {
-    writeFileSync(join(tmp, 'package.json'), '{}');
+  it('includes config/manifest files as candidates but excludes lock files', () => {
+    writeFileSync(join(tmp, 'package.json'), '{"name":"x"}');
+    writeFileSync(join(tmp, 'requirements.txt'), 'fastapi==0.1\n');
+    writeFileSync(join(tmp, 'package-lock.json'), '{}');
     writeFileSync(join(tmp, 'README.md'), '# Read me');
-    const r = loadRepo(tmp);
-    expect(r.mdFiles.every((f) => f.name.endsWith('.md'))).toBe(true);
+    const names = loadRepo(tmp).mdFiles.map((f) => f.name);
+    expect(names).toContain('package.json');     // manifest → candidate
+    expect(names).toContain('requirements.txt'); // manifest → candidate
+    expect(names).toContain('README.md');
+    expect(names).not.toContain('package-lock.json'); // lock file → excluded
+  });
+
+  it('skips cache, venv, and tool-output directories', () => {
+    for (const dir of ['.pytest_cache', '.venv', 'graphify-out', '.aiready']) {
+      mkdirSync(join(tmp, dir), { recursive: true });
+      writeFileSync(join(tmp, dir, 'README.md'), '# noise');
+    }
+    writeFileSync(join(tmp, 'AGENTS.md'), '# agent');
+    const paths = loadRepo(tmp).mdFiles.map((f) => f.path);
+    expect(paths).toContain('AGENTS.md');
+    expect(paths.some((p) => p.startsWith('.pytest_cache/') || p.startsWith('.venv/') || p.startsWith('graphify-out/') || p.startsWith('.aiready/'))).toBe(false);
   });
 
   it('skips node_modules directory', () => {
@@ -201,13 +217,15 @@ describe('loadRepo — Graphify detection', () => {
     const r = loadRepo(tmp);
     expect(r.usedGraphify).toBe(true);
     const paths = r.mdFiles.map((f) => f.path);
-    expect(paths[0]).toBe('B.md'); // highest concept score
+    expect(paths[0]).toBe('B.md'); // highest concept score ranks first
     expect(paths).toContain('A.md');
-    expect(paths).not.toContain('C.md');
+    // C.md is unioned in via the full md walk (graph ranking no longer gates it)
+    expect(paths).toContain('C.md');
+    // graph ranking order is still reflected in conceptMatchedFiles
     expect(r.conceptMatchedFiles).toEqual(['B.md', 'A.md']);
   });
 
-  it('skips non-document nodes', () => {
+  it('graph ranking skips non-document nodes (but the walk still includes the .md)', () => {
     writeFileSync(join(tmp, 'AGENTS.md'), '# agent');
     writeFileSync(join(tmp, 'CODE.md'), '# code');
     writeGraph(join(tmp, 'graphify-out'), {
@@ -218,7 +236,8 @@ describe('loadRepo — Graphify detection', () => {
       links: [{ source: 'n2', target: 'n1' }],
     });
     const r = loadRepo(tmp);
-    expect(r.mdFiles.map((f) => f.path)).toEqual(['AGENTS.md']);
+    expect(r.conceptMatchedFiles).toEqual(['AGENTS.md']); // code node not ranked
+    expect(r.mdFiles.map((f) => f.path).sort()).toEqual(['AGENTS.md', 'CODE.md']); // both walked
   });
 
   it('finds dated subdirectory graphify-out/YYYY-MM-DD/graph.json', () => {
@@ -239,7 +258,9 @@ describe('loadRepo — Graphify detection', () => {
     writeFileSync(join(tmp, 'graphify-out', 'graph.json'), 'not valid json {{{');
     const r = loadRepo(tmp);
     expect(r.usedGraphify).toBe(true);
-    expect(r.mdFiles.map((f) => f.path)).toEqual(['AGENTS.md']);
+    // graph unusable, but the md walk still yields both files
+    expect(r.mdFiles.map((f) => f.path).sort()).toEqual(['AGENTS.md', 'README.md']);
+    expect(r.conceptMatchedFiles).toEqual([]);
   });
 
   it('returns full uncapped content in fullContent', () => {

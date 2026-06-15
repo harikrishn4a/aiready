@@ -40,10 +40,12 @@ export function isDocsArtifact(filename: string): boolean {
   return artifactOutputPath(filename) !== filename;
 }
 
-/** True for any recognised plan-file path (legacy .aiready or new plan/). */
+/**
+ * True for aiready's OWN remediation plan path (new plan/ or legacy .aiready/).
+ * A bare user-authored `plan.md` at the repo root is NOT ours and is a valid source.
+ */
 export function isPlanPath(file: string): boolean {
   return (
-    file === 'plan.md' ||
     file === 'plan/plan.md' ||
     file.endsWith('/plan/plan.md') ||
     file === '.aiready/plan.md' ||

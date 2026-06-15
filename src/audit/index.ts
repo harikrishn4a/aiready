@@ -25,7 +25,7 @@ export async function runAudit(target: string, opts: AuditOptions): Promise<void
   const mappings = await withSpinner(
     'Finding harness artifacts...',
     spinnerEnabled,
-    () => mapFiles(files.mdFiles, provider, files.usedGraphify),
+    () => mapFiles(files.mdFiles, provider, { forceKeep: files.seedFiles }),
   );
   const scored = await withSpinner(
     'Scoring harness quality...',
