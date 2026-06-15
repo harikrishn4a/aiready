@@ -10,6 +10,8 @@ export interface ChatOptions {
   temperature?: number;
   /** Deterministic sampling seed (OpenAI-compatible providers only). */
   seed?: number;
+  /** Max output tokens. Raise for large structured JSON responses (scoring). */
+  maxTokens?: number;
 }
 
 export interface LLMProvider {
@@ -46,7 +48,7 @@ export class AnthropicProvider implements LLMProvider {
   async chat(system: string, user: string, opts?: ChatOptions): Promise<string> {
     // If a specific model was chosen, always use it; otherwise route by fast hint
     const model = this.modelId ?? (opts?.fast ? ANTHROPIC_FAST : ANTHROPIC_QUALITY);
-    const maxTokens = opts?.fast ? 1024 : 2048;
+    const maxTokens = opts?.maxTokens ?? (opts?.fast ? 1024 : 2048);
     const response = await this.client.messages.create({
       model,
       max_tokens: maxTokens,
@@ -87,6 +89,7 @@ export class OpenAIProvider implements LLMProvider {
       model,
       ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
       ...(opts?.seed !== undefined ? { seed: opts.seed } : {}),
+      ...(opts?.maxTokens !== undefined ? { max_tokens: opts.maxTokens } : {}),
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },

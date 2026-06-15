@@ -157,6 +157,34 @@ describe('scoreRepo — intent-based scoring', () => {
   });
 });
 
+describe('scoreRepo — non-markdown harness artifacts', () => {
+  let tmpDir: string;
+  afterEach(() => { try { rmSync(tmpDir, { recursive: true, force: true }); } catch { /* ignore */ } });
+
+  it('feeds the Makefile content to the scorer for verification', async () => {
+    tmpDir = join(tmpdir(), `aiready-nonmd-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(join(tmpDir, 'Makefile'), 'check:\n\tpytest\nlint:\n\truff check .\n');
+
+    const provider = makeProvider(allZeroScores());
+    const result = await scoreRepo(makeFiles({ targetDir: tmpDir }), [], provider);
+    const userPrompt = (provider.chat as ReturnType<typeof vi.fn>).mock.calls[0][1] as string;
+    expect(userPrompt).toContain('=== Makefile ===');
+    expect(userPrompt).toContain('pytest');
+    expect(result.verification.files).toContain('Makefile');
+  });
+
+  it('feeds feature_list.json to the scorer for state', async () => {
+    tmpDir = join(tmpdir(), `aiready-nonmd2-${Date.now()}`);
+    mkdirSync(tmpDir, { recursive: true });
+    writeFileSync(join(tmpDir, 'feature_list.json'), '{"project":"x","features":[]}');
+
+    const provider = makeProvider(allZeroScores());
+    const result = await scoreRepo(makeFiles({ targetDir: tmpDir }), [], provider);
+    expect(result.state.files).toContain('feature_list.json');
+  });
+});
+
 describe('scoreRepo — verification baseline', () => {
   let tmpDir: string;
 
@@ -201,7 +229,7 @@ describe('scoreRepo — provider interaction', () => {
     expect(provider.chat).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      { fast: false, temperature: 0, seed: 7 },
+      { fast: false, temperature: 0, seed: 7, maxTokens: 4096 },
     );
   });
 
@@ -231,6 +259,17 @@ describe('scoreRepo — provider interaction', () => {
     expect(systemPrompt).toContain('Can an AI coding agent do its job using only what is documented here?');
     expect(systemPrompt).toContain('Ignore file names, heading names, and structural conventions');
     expect(systemPrompt).toContain('workflow doc or changelog scores max 20');
+  });
+
+  it('retries once when the first scoring response is unparseable', async () => {
+    const chat = vi.fn()
+      .mockResolvedValueOnce('sorry, here is no json')
+      .mockResolvedValueOnce(JSON.stringify({ ...allZeroScores(), identity: { score: 77, gaps: [], findings: [] } }));
+    const provider: LLMProvider = { chat, getTotalTokens: () => 0 };
+    const { files, mappings } = withFile('AGENTS.md', '# Agents\nContent.');
+    const result = await scoreRepo(makeFiles(files), mappings, provider);
+    expect(chat).toHaveBeenCalledTimes(2);
+    expect(result.identity.score).toBe(77);
   });
 
   it('returns 0 for non-verification subsystems when provider returns invalid JSON', async () => {

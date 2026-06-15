@@ -103,6 +103,11 @@ Apply the bands consistently: identical content must always receive the same sco
 TEMPLATE REFERENCE (quality examples — headings are suggestions not requirements):
 ${templateContext}
 
+OUTPUT LIMITS — keep the JSON small so it is never truncated:
+- At most 3 findings and 3 gaps per subsystem
+- Each message/gap under 20 words
+- No text outside the JSON object
+
 Return ONLY valid JSON:
 {
   "identity":     { "score": 0-100, "gaps": ["specific gap..."], "findings": [{"type":"pass"|"warn"|"fail","message":"..."}] },
@@ -166,6 +171,13 @@ const ENTRY_FILE_BASENAMES = new Set([
 function isEntryFile(path: string): boolean {
   return ENTRY_FILE_BASENAMES.has((path.split('/').pop() ?? path).toLowerCase());
 }
+
+// Harness artifacts the loader can't collect (non-markdown) but that are central
+// to a subsystem. Read directly so they are actually scored.
+const NON_MD_HARNESS: Partial<Record<Subsystem, string[]>> = {
+  verification: ['Makefile', 'scripts/verify.sh', 'scripts/init.sh'],
+  state: ['feature_list.json'],
+};
 
 function buildSubsystemContent(
   subsystem: Subsystem,
@@ -285,6 +297,23 @@ export async function scoreRepo(
     ...buildSubsystemContent(s, files.mdFiles, mappings),
   }));
 
+  // Non-markdown harness artifacts are never collected by the loader (it walks
+  // .md only), so feed them to the scorer directly — otherwise a real Makefile /
+  // scripts / feature_list.json are invisible and their subsystems are under-scored.
+  for (const sc of subsystemContents) {
+    // Prepend (these are the central artifact for the subsystem, e.g. Makefile for
+    // verification) so the per-subsystem content cap never truncates them away.
+    for (const rel of [...(NON_MD_HARNESS[sc.subsystem] ?? [])].reverse()) {
+      if (sc.files.includes(rel)) continue;
+      const raw = readFsFile(join(files.targetDir, rel)) ?? readFsFile(join(files.targetDir, 'docs', rel));
+      if (raw && raw.trim().length > 0) {
+        sc.files.unshift(rel);
+        const body = raw.slice(0, PER_FILE_CONTENT_CAP);
+        sc.content = sc.content ? `=== ${rel} ===\n${body}\n\n${sc.content}` : `=== ${rel} ===\n${body}`;
+      }
+    }
+  }
+
   const contentSections = subsystemContents
     .map(({ subsystem, content }) => {
       if (!content) return `### ${subsystem}\n(no files mapped to this subsystem)`;
@@ -294,14 +323,19 @@ export async function scoreRepo(
     .join('\n\n');
 
   // Single LLM call scores all 5 subsystems intent-based.
-  // temperature:0 + fixed seed keep repeated audits of identical content stable.
-  const text = await provider.chat(
-    buildScoringSystemPrompt(templates),
-    `Score this repository's AI harness:\n\n${contentSections}`,
-    { fast: false, temperature: 0, seed: 7 },
-  );
+  // temperature:0 + fixed seed keep repeated audits of identical content stable;
+  // maxTokens is generous so the 5-subsystem JSON is never truncated.
+  const systemPrompt = buildScoringSystemPrompt(templates);
+  const userPrompt = `Score this repository's AI harness:\n\n${contentSections}`;
+  const scoringOpts = { fast: false as const, temperature: 0, seed: 7, maxTokens: 4096 };
 
-  const llmScores = parseScorerResponse(text);
+  let text = await provider.chat(systemPrompt, userPrompt, scoringOpts);
+  let llmScores = parseScorerResponse(text);
+  // One retry if the response was unparseable (transient truncation/format slip).
+  if (Object.keys(llmScores).length === 0) {
+    text = await provider.chat(systemPrompt, userPrompt, scoringOpts);
+    llmScores = parseScorerResponse(text);
+  }
 
   // Verification baseline as finding only — not a score input.
   const packageJsonScripts = (files.packageJson?.scripts ?? null) as Record<string, unknown> | null;

@@ -207,6 +207,7 @@ function buildRewritePrompt(
   sourceContents: string[],
   currentContent: string | null,
   stackInfo: string | null,
+  repoName: string | null,
 ): string {
   const parts: string[] = [
     `Create ${filename} following this template exactly:`,
@@ -220,6 +221,11 @@ function buildRewritePrompt(
       `\n=== DETECTED STACK (make every command match this — do NOT emit npm commands for a non-Node project) ===`,
       stackInfo,
       `=== END DETECTED STACK ===`,
+      `PATHS: this file lives at the repository ROOT and its commands run from there.`,
+      `The project root IS the current directory ("."). Do NOT \`cd\` into a`,
+      `subdirectory and do NOT prefix commands, paths, or scripts with the repository's`,
+      `own folder name${repoName ? ` ("${repoName}")` : ''} — write \`pytest\`, not \`pytest ${repoName ?? '<repo>'}/\`;`,
+      `\`bash dev.sh\`, not \`bash ${repoName ?? '<repo>'}/dev.sh\`; \`./scripts/verify.sh\`, not \`cd ${repoName ?? '<repo>'} && ...\`.`,
     );
   }
 
@@ -281,6 +287,19 @@ export function fixMakefileTabs(content: string): string {
     .join('\n');
 }
 
+/**
+ * Stack-aware files (Makefile, scripts, startup.md) live at the repo root, so a
+ * `cd <repo> &&` or `<repo>/` path prefix the LLM sometimes adds is wrong. Strip it.
+ */
+export function stripRepoPrefix(content: string, repoName: string | null): string {
+  if (!repoName) return content;
+  const esc = repoName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return content
+    .replace(new RegExp(`cd ${esc}\\s*&&\\s*`, 'g'), '')    // cd betterworld && X → X
+    .replace(new RegExp(`(^|[\\s\`(])${esc}/`, 'g'), '$1')  // pytest betterworld/ → pytest
+    .replace(/[ \t]+$/gm, '');                              // tidy any dangling trailing space
+}
+
 /** Safety net: strip any {{PLACEHOLDER}} text the LLM left behind. */
 export function sanitisePlaceholders(content: string): string {
   return content
@@ -312,15 +331,23 @@ export async function rewriteToCanonical(
   }
 
   const stackInfo = isStackAware(artifact.filename) ? detectStack(target) : null;
+  const repoName = isStackAware(artifact.filename) ? (target.split('/').filter(Boolean).pop() ?? null) : null;
 
   const raw = await provider.chat(
     buildSystemPrompt(artifact.filename),
-    buildRewritePrompt(artifact.filename, template, sourceContents, artifact.currentContent, stackInfo),
-    { fast: false },
+    buildRewritePrompt(artifact.filename, template, sourceContents, artifact.currentContent, stackInfo, repoName),
+    // Artifacts run up to MAX_LINES (~300) lines — give the model enough output
+    // budget so AGENTS.md / CONSTRAINTS.md etc. are never truncated mid-section.
+    { fast: false, maxTokens: 4096 },
   );
 
   const changes: string[] = [];
   let content = cleanLLMOutput(raw);
+
+  // Stack-aware files live at the repo root — remove any self-repo path prefix.
+  if (isStackAware(artifact.filename)) {
+    content = stripRepoPrefix(content, repoName);
+  }
 
   // Makefiles need TAB-indented recipes — repair LLM space indentation.
   if (artifact.filename === 'Makefile') {

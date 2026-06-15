@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { rewriteToCanonical, sanitisePlaceholders, linkDocsReferences, fixMakefileTabs, isStackAware } from '../src/init/rewriter';
+import { rewriteToCanonical, sanitisePlaceholders, linkDocsReferences, fixMakefileTabs, isStackAware, stripRepoPrefix } from '../src/init/rewriter';
 import type { LLMProvider } from '../src/utils/llm';
 
 function mockProvider(response: string): LLMProvider {
@@ -144,6 +144,23 @@ describe('fixMakefileTabs', () => {
   it('leaves already-tabbed recipes and non-recipe lines untouched', () => {
     const src = '# comment\nsetup:\n\tnpm ci\n\nVAR = 1\n';
     expect(fixMakefileTabs(src)).toBe(src);
+  });
+});
+
+describe('stripRepoPrefix', () => {
+  it('removes `cd <repo> &&` and `<repo>/` path prefixes', () => {
+    const src = 'setup:\n\tcd betterworld && bash setup.sh\ntest:\n\tpytest betterworld/\nlint:\n\truff check betterworld/\n';
+    const out = stripRepoPrefix(src, 'betterworld');
+    expect(out).toContain('\tbash setup.sh');
+    expect(out).toContain('\tpytest\n');
+    expect(out).toContain('\truff check\n');
+    expect(out).not.toContain('betterworld/');
+    expect(out).not.toContain('cd betterworld');
+  });
+
+  it('is a no-op when repoName is null', () => {
+    const src = 'pytest betterworld/';
+    expect(stripRepoPrefix(src, null)).toBe(src);
   });
 });
 
