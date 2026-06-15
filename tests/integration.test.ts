@@ -162,6 +162,16 @@ describe('CLI binary: missing OPENAI_API_KEY (openai provider)', () => {
   });
 });
 
+// ── CLI binary: graph command ────────────────────────────────────────────────
+
+describe('CLI binary: graph', () => {
+  it('exits 1 with a clear error when the target directory does not exist', () => {
+    const result = spawnCli(['graph', '--target', join(root, 'no', 'such', 'dir', 'xyz')]);
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain('Target directory not found');
+  });
+});
+
 // ── CLI binary: --help / --version ───────────────────────────────────────────
 
 describe('CLI binary: --version', () => {
@@ -179,6 +189,10 @@ describe('CLI binary: --help', () => {
 
   it('lists audit command in help', () => {
     expect(spawnCli(['--help']).stdout).toContain('audit');
+  });
+
+  it('lists graph command in help', () => {
+    expect(spawnCli(['--help']).stdout).toContain('graph');
   });
 
   it('audit --help shows --provider and --model flags', () => {

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { Command } from 'commander';
 import { runAudit } from './audit/index.js';
 import { runInit } from './init/index.js';
+import { runGraph } from './graph/index.js';
 
 export const program = new Command();
 
@@ -9,6 +10,17 @@ program
   .name('aiready')
   .description('Audit repositories for AI agent readiness')
   .version('0.1.0');
+
+program
+  .command('graph')
+  .description('Build a repo knowledge graph with graphify (installs it if missing)')
+  .option('-t, --target <dir>', 'target directory', '.')
+  .action((opts: { target: string }) => {
+    runGraph(opts.target).catch((err: unknown) => {
+      process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    });
+  });
 
 program
   .command('audit')
