@@ -566,6 +566,25 @@
       ],
       "agent_notes": "src/utils/layout.ts: PLAN_DIR/DOCS_DIR, planFilePath, artifactOutputPath (only non-entry .md -> docs/), isDocsArtifact, isPlanPath. remediation.writeRemediationPlan -> plan/plan.md; artifactExists/readArtifact check output+legacy root; plan markdown shows output: line. loader: readHarness + loadGuaranteedFiles look in root and docs/. planner: ArtifactPlan.outputPath; legacy root file counts as existing -> improve into docs/. executor: writes outputPath, reads currentContent from output or legacy root, improve no longer skipped when only the legacy root copy exists. rewriter.linkDocsReferences deterministically rewrites bare docs-bound refs to docs/ paths (skips self, root files, already-prefixed). parser isPlanFile uses isPlanPath.",
       "last_updated": "2026-06-15"
+    },
+    {
+      "id": "feat-023",
+      "priority": 23,
+      "area": "audit+init",
+      "title": "Stack-aware artifacts, stable scoring, remaining-gaps display",
+      "user_visible_behavior": "Generated Makefile/scripts/startup.md match the project's real toolchain (e.g. pytest/ruff on a Python repo, not npm); audit scores are stable between runs (temperature 0 + seed + score bands); CLI shows critical gaps as a numbered list, a 'REMAINING GAPS — why the score isn't 100' section after init, and a disclosure that scoring is LLM intent-based and may vary.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": ["npm run build", "npm run typecheck", "npm run lint", "npm test"],
+      "evidence": [
+        "npm run build: zero errors",
+        "npm run typecheck: clean",
+        "npm run lint: clean",
+        "npm test: 352/352 (26 test files; +detect.test.ts, +scorer/rewriter/spinner cases)",
+        "Live betterworld (Anthropic Sonnet): Makefile is pure Python (pytest/ruff/mypy/uvicorn), 0 npm refs, tab-indented; audit-twice variance 46 vs 43 (~3pt, was 14pt); standalone post-init audit 81/100 after the per-file scorer fix"
+      ],
+      "agent_notes": "utils/detect.ts: detectStack() factual stack summary (Node/Python/Go/Rust/Ruby + scripts). rewriter: STACK_AWARE_FILES (Makefile, scripts/init.sh, scripts/verify.sh, startup.md) routed through LLM with DETECTED STACK block + per-file guidance; fixMakefileTabs repairs space-indented recipes. executor.isTemplateCopy excludes stack-aware. llm.ts ChatOptions {temperature, seed}; mapper+scorer pass {temperature:0, seed:7}; scorer prompt has explicit SCORE BANDS. scorer.buildSubsystemContent caps PER FILE (6000), entry files (AGENTS.md) ordered last, scoreRepo joins up to 16000 — fixes docs/ artifacts being crowded out (49->81). reporter: numbered critical gaps + SCORING_DISCLOSURE. init.printRemainingGaps after re-score; getAuditScoreDetailed returns per-subsystem gaps. integration tests pin DOTENV_CONFIG_PATH so repo .env never leaks.",
+      "last_updated": "2026-06-15"
     }
   ]
 }

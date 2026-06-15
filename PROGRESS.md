@@ -1,14 +1,14 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 104 KB (full pipeline + Stage 2 bundled)
-- Tests: 338/338 passing (25 test files)
+- Build: passing — dist/cli.js ~110 KB (full pipeline + Stage 2 bundled)
+- Tests: 352/352 passing (26 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-15
-- Active feature: none — **feat-021, feat-022 complete**
-- Live smoke: audit + init verified on ../betterworld via OpenAI gpt-4o-mini
-  (30 → 84 internal re-score; standalone post-init audit 70/100)
+- Active feature: none — **feat-021, feat-022, feat-023 complete**
+- Live smoke: audit + init verified on ./betterworld via Anthropic Sonnet
+  (standalone post-init audit 81/100; audit-twice variance ~3pt with temperature:0)
 
 ## Completed
 - [x] Product design and stage definitions
@@ -51,6 +51,14 @@
   at root or docs/. Planner adds outputPath, treats legacy root artifacts as
   existing → restructure into docs/. rewriter.linkDocsReferences() deterministically
   rewrites cross-references to docs/ paths.
+- [x] **feat-023** — Stack-aware artifacts + stable scoring + remaining-gaps UX.
+  generateOnly Makefile/scripts/startup.md now rewritten with detected-stack context
+  (utils/detect.ts detectStack) instead of npm template copies; Makefile recipes
+  tab-repaired. mapper+scorer use temperature:0 + seed:7 and a score-band-anchored
+  prompt (betterworld audit-twice variance 14pt→3pt). Scorer caps content per-file
+  (6000) not per-blob (3000) so docs/ artifacts aren't crowded out by AGENTS.md
+  (betterworld standalone audit 49→81). CLI: numbered critical gaps, REMAINING GAPS
+  section after init re-score, non-determinism disclosure in audit+init.
 
 ## Backlog — Stage 1
 

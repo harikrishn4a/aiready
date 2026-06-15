@@ -231,3 +231,33 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Prompt-only instruction — unreliable. Post-hoc link checking that only warns — leaves broken references in place.
 - **Constraints introduced**: docs/-bound artifact names come from `CANONICAL_ARTIFACTS` filtered by `isDocsArtifact`; the regex must not double-prefix or rewrite root files (AGENTS.md, Makefile, *.json).
 - **Revisit when**: Artifacts gain references to files outside the canonical set that also move under docs/.
+
+---
+
+### 2026-06-15: Stack-aware generation for Makefile / scripts / startup.md
+
+- **Decision**: The generateOnly artifacts whose content is command-bearing — `Makefile`, `scripts/init.sh`, `scripts/verify.sh`, `startup.md` — are no longer copied verbatim from `examples/`. They are routed through the rewriter with a `detectStack()` summary so commands match the real toolchain (e.g. `pytest`/`ruff`/`uvicorn` on a Python repo). All other generateOnly artifacts (rubrics, schemas, checklists) remain verbatim copies. Makefile recipe lines are tab-repaired post-generation (`fixMakefileTabs`).
+- **Reason**: A verbatim template Makefile said `npm test` on a Python project — the documented "single runnable verify command" literally failed, capping the verification subsystem. Verified fix: betterworld's Makefile is now pure Python with zero npm references.
+- **Rejected alternatives**: Keep verbatim and let humans edit — defeats "init makes it work". Hard-code per-language Makefiles — brittle; the LLM adapts better given detected facts. Token-substitute commands into the template — fragile across stacks.
+- **Constraints introduced**: LLM-generated Makefiles risk space indentation (breaks `make`) → `fixMakefileTabs` is mandatory for the Makefile path. `detectStack` returns facts only, never hard-coded commands.
+- **Revisit when**: Stack detection needs more ecosystems, or generated commands prove inaccurate (e.g. wrong dev-server entrypoint) often enough to warrant reading config files directly.
+
+---
+
+### 2026-06-15: Stabilise LLM scoring (temperature 0 + seed + score bands)
+
+- **Decision**: The mapper and scorer LLM calls pass `temperature: 0` and `seed: 7` (seed honoured by OpenAI-compatible providers; Anthropic gets temperature only). The scorer system prompt anchors to explicit 0-100 SCORE BANDS. A non-determinism disclosure is printed in audit and init output.
+- **Reason**: Repeated audits of identical content swung widely (84 vs 70 on gpt-4o-mini). Low temperature + a fixed seed + banded rubric tightened this to ~3pt overall on Sonnet. LLM scoring is inherently non-deterministic, so the disclosure sets correct expectations rather than implying a fixed metric.
+- **Rejected alternatives**: Average N scoring calls — N× cost for marginal gain. Deterministic structural scoring — already rejected (feat-021). Hide the variance — misleading.
+- **Constraints introduced**: `ChatOptions` carries `temperature`/`seed`; scoring/mapping must keep `temperature: 0` for repeatability. Anthropic ignores `seed`, so its scores remain slightly less repeatable than OpenAI's.
+- **Revisit when**: A provider adds stronger determinism controls, or score stability still blocks CI gating via `--min-score`.
+
+---
+
+### 2026-06-15: Score content per-file, not per-subsystem-blob
+
+- **Decision**: `scorer.buildSubsystemContent` caps each mapped file at 6000 chars (was: join all files then slice the blob at 3000). Dedicated artifacts are ordered before agent entry files; the per-subsystem join is bounded at 16000.
+- **Reason**: After the docs/ split, `AGENTS.md` references every artifact and is mapped into multiple subsystems. The old 3000-char blob cap let a large `AGENTS.md` crowd out the real `docs/CONSTRAINTS.md` etc., so the scorer literally reported "content is not shown — only its existence is referenced" and scored low. Per-file capping + entry-files-last fixed it: betterworld's standalone audit went 49 → 81.
+- **Rejected alternatives**: Only raise the blob cap — entry files still dominate ordering. Stop mapping AGENTS.md to multiple subsystems — loses genuinely useful inline content.
+- **Constraints introduced**: Total scoring prompt grows with file count; bounded by the 6000/file and 16000/subsystem caps.
+- **Revisit when**: Very large repos push the scoring prompt past model context limits.
