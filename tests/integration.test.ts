@@ -98,13 +98,15 @@ describe('pipeline: good-repo scoring (mocked provider)', () => {
 
   it('passes cross-ref checks', () => {
     const files = loadRepo(goodRepo);
+    // Pin mtime so progress-md-is-fresh is deterministic (git checkout sets
+    // mtime to "now" on CI; local copies may be weeks old).
+    files.progressMdModifiedAt = new Date();
     const xref = crossRef(files);
-    // Exclude progress-md-is-fresh: it compares the committed fixture's mtime
-    // against Date.now(), so it inevitably rots past the 7-day threshold.
-    const nonTimeDependent = xref.checks.filter(
-      (c) => c.name !== 'progress-md-is-fresh',
-    );
-    expect(nonTimeDependent.filter((c) => !c.passed)).toHaveLength(0);
+    const failed = xref.checks.filter((c) => !c.passed);
+    expect(
+      failed,
+      failed.map((c) => `${c.name}: ${c.detail}`).join('; '),
+    ).toHaveLength(0);
   });
 });
 
