@@ -1,6 +1,6 @@
 {
   "project": "aiready",
-  "last_updated": "2026-06-05",
+  "last_updated": "2026-06-15",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -528,6 +528,44 @@
       ],
       "agent_notes": "Module 1: generator.ts SYSTEM_PROMPT replaced with strict heading rules (exact character-for-character, lists '## Current State', '## Stack', '## What this is' as examples). Module 2: new src/init/corrector.ts with findDriftedHeadings() (Dice bigram similarity), replaceHeadings() (regex replace), correctHeadings() (deterministic + optional LLM for missing sections); wired into both executeGenerate and executeImprove before write; cleanLLMOutput applied to corrected output. Module 3: ora@5 spinner in executor.ts (not ora@8 — ESM-only breaks CJS bundle); spinner skipped for generateOnly artifacts; 7 spinner tests with vi.mock('ora'). DECISIONS.md updated with ora@5 rationale.",
       "last_updated": "2026-06-05"
+    },
+    {
+      "id": "feat-021",
+      "priority": 21,
+      "area": "audit+init",
+      "title": "Intent-based scoring + unified canonical rewriter",
+      "user_visible_behavior": "Audit scores each subsystem with one intent-based LLM question (can an agent do its job using only what is documented here?) with no structural checks; init generates/improves artifacts through a single executeArtifact() that restructures any content into canonical form via per-file prompts, sanitises placeholders, and suggests source files for cleanup at the end.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": ["npm run build", "npm run typecheck", "npm run lint", "npm test"],
+      "evidence": [
+        "npm run build: dist/cli.js ~104 KB, zero errors",
+        "npm run typecheck: clean",
+        "npm run lint: clean",
+        "npm test: 338/338 (25 test files)",
+        "Live: betterworld init 30 -> 84 internal re-score via OpenAI gpt-4o-mini"
+      ],
+      "agent_notes": "scorer.ts: SUBSYSTEM_INTENTS + single intent-based LLM call; removed detectFileType, scoreMakefile/Shell/Json/Architecture/MarkdownStructure, scoreStructural, combineScores, scoreFromBaseline, 40/60 weighting; SubsystemScore = { score, gaps, findings, files, baselineStatus? }; checkVerificationBaseline kept as finding-only. reporter.ts prints per-finding glyph lines. rewriter.ts (new) replaces improver: rewriteToCanonical handles generate+improve with per-file prompt dispatch (FILE_GUIDANCE from INIT-COMMAND-PROMPTS.md), folded heading correction, 300-line cap. executor.ts: executeArtifact replaces executeGenerate/executeImprove. index.ts: suggestNoiseCleaning. generator.ts trimmed to loadTemplate/assertTemplateLoaded/BLANK_TEMPLATE_FILES.",
+      "last_updated": "2026-06-15"
+    },
+    {
+      "id": "feat-022",
+      "priority": 22,
+      "area": "audit+init",
+      "title": "plan/ and docs/ layout with root entry points",
+      "user_visible_behavior": "Audit writes its plan to plan/plan.md; init writes non-entry markdown artifacts under docs/ while keeping agent entry points (AGENTS.md, CLAUDE.md, .cursorrules, .windsurfrules, copilot-instructions) and build files (Makefile, scripts/, *.json) at the repo root; generated artifacts cross-reference each other via docs/ paths so an agent knows where to look.",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": ["npm run build", "npm run typecheck", "npm run lint", "npm test"],
+      "evidence": [
+        "npm run build: zero errors",
+        "npm run typecheck: clean",
+        "npm run lint: clean",
+        "npm test: 338/338 (25 test files; +layout.test.ts, planner outputPath, rewriter linkDocsReferences)",
+        "Live betterworld: audit plan at plan/plan.md; 13 docs/*.md written; AGENTS.md/Makefile/feature_list.json at root; AGENTS.md carries 16 docs/ references; standalone post-init audit 70/100 (was 30)"
+      ],
+      "agent_notes": "src/utils/layout.ts: PLAN_DIR/DOCS_DIR, planFilePath, artifactOutputPath (only non-entry .md -> docs/), isDocsArtifact, isPlanPath. remediation.writeRemediationPlan -> plan/plan.md; artifactExists/readArtifact check output+legacy root; plan markdown shows output: line. loader: readHarness + loadGuaranteedFiles look in root and docs/. planner: ArtifactPlan.outputPath; legacy root file counts as existing -> improve into docs/. executor: writes outputPath, reads currentContent from output or legacy root, improve no longer skipped when only the legacy root copy exists. rewriter.linkDocsReferences deterministically rewrites bare docs-bound refs to docs/ paths (skips self, root files, already-prefixed). parser isPlanFile uses isPlanPath.",
+      "last_updated": "2026-06-15"
     }
   ]
 }

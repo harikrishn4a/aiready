@@ -15,8 +15,8 @@ All write operations require `--force` or a user prompt.
 
 | Stage | Command | What it does | Status |
 |---|---|---|---|
-| 1 | `npx aiready audit` | LLM-powered audit — scores 5 harness subsystems, writes `.aiready/plan.md` | **complete** |
-| 2 | `npx aiready init` | Reads plan.md + source context, generates missing harness artifacts | **current** |
+| 1 | `npx aiready audit` | LLM-powered intent-based audit — scores 5 harness subsystems, writes `plan/plan.md` | **complete** |
+| 2 | `npx aiready init` | Reads `plan/plan.md` + source context, writes canonical artifacts under `docs/` (entry points + Makefile stay at root) | **complete** |
 | 3 | `npx aiready analyze` | Reads code + Graphify graph, finds undocumented intent, writes `.aiready/gaps.md` | not started |
 | 4 | `npx aiready drift` | Reads harness + git history, finds stale docs, writes `.aiready/drift.md` | not started |
 | 5 | `npx aiready fix` | Reads plan/gaps/drift, patches exactly what's wrong, shows diff before write | not started |
@@ -37,24 +37,34 @@ src/
 
   audit/           ← Stage 1. LLM-powered pipeline.
     index.ts       ← audit command handler. Builds config, runs pipeline,
-                     writes .aiready/plan.md, handles spinner + exit codes.
+                     writes plan/plan.md, handles spinner + exit codes.
     loader.ts      ← reads target repo files into memory. Synchronous.
                      Graphify-aware: uses graph.json for semantic file ranking
-                     when present; falls back to walking all .md files.
+                     when present; falls back to walking all .md files. Finds
+                     canonical artifacts at the repo root OR under docs/.
     mapper.ts      ← two-stage LLM pipeline: triage (filename filter) →
                      classify (subsystem assignment). Content-signal fallback
                      via SUBSYSTEM_SIGNAL_PATTERNS. Uses { fast: true }.
-    scorer.ts      ← LLM quality scoring per subsystem using full file content.
-                     Strict course-aligned prompt. Returns score 0–100 + findings.
+    scorer.ts      ← 100% intent-based LLM scoring. ONE call answers per subsystem
+                     "can an agent do its job using only what is documented here?".
+                     No structural checks. checkVerificationBaseline = finding only.
     cross-ref.ts   ← validates commands and modules against project reality.
                      Falls back to mapped files when canonical names absent.
-    reporter.ts    ← formats terminal (multi-line) and JSON output.
+    reporter.ts    ← formats terminal (per-finding glyph lines) and JSON output.
     remediation.ts ← builds typed remediation contract (generate / improve /
-                     source_context). Writes .aiready/plan.md. max_lines: 300.
+                     source_context). Writes plan/plan.md. max_lines: 300.
 
-  init/            ← Stage 2. LLM-assisted. Reads .aiready/plan.md.
-                     Generates missing harness artifacts from source context.
-                     Never overwrites without --force. (in progress)
+  init/            ← Stage 2. LLM-assisted. Reads plan/plan.md.
+    planner.ts     ← derives ArtifactPlan[] (action + outputPath) from
+                     CANONICAL_ARTIFACTS + filesystem (root or docs/).
+    rewriter.ts    ← rewriteToCanonical(): generate+improve via per-file prompts,
+                     folded heading correction, 300-line cap, sanitisePlaceholders,
+                     linkDocsReferences (deterministic docs/ cross-links).
+    executor.ts    ← executeArtifact(): writes to outputPath (docs/ or root),
+                     ora@5 spinner, template-copy for generateOnly artifacts.
+    consolidator.ts← merges/​shims agent entry files into AGENTS.md (root).
+    index.ts       ← runInit: plan → execute → consolidate → re-score →
+                     suggestNoiseCleaning. Never overwrites without --force.
 
   analyze/         ← Stage 3. LLM-assisted. Reads code + Graphify graph.
                      Finds undocumented intent. Writes .aiready/gaps.md. (stub)
@@ -74,6 +84,8 @@ src/
     models.ts      ← versioned Anthropic model list + OpenAI fallback list.
     tokens.ts      ← token estimation: Math.ceil(chars / 4).
     spinner.ts     ← TTY-only sea-green spinner. Silent in JSON/CI mode.
+    layout.ts      ← artifact placement: PLAN_DIR/DOCS_DIR, planFilePath,
+                     artifactOutputPath (non-entry .md → docs/), isPlanPath.
     fs.ts          ← filesystem helpers (readFile, exists, listDirs, listFiles,
                      statMtime, walkMdFiles).
     detect.ts      ← stack and package manager detection.
@@ -129,37 +141,47 @@ reporter.ts      Prints multi-line subsystem scores to terminal
 | constraints | Does an agent know what it must never do? (MUST NOT language, hard limits) |
 
 **Output files written by Stage 1:**
-- `.aiready/plan.md` — remediation contract (missing artifacts, weak artifacts, source context)
+- `plan/plan.md` — remediation contract (missing artifacts, weak artifacts, source context)
 
 **Exit codes:**
 - `0` — always, unless `--min-score N` is passed and the score falls below N
 
 ---
 
-### Stage 2 — init (current)
-`npx aiready init [--target DIR] [--force] [--provider P] [--model M]`
+### Stage 2 — init (complete)
+`npx aiready init [--target DIR] [--force] [--yes] [--provider P] [--model M]`
 
-**Input:** `.aiready/plan.md` written by Stage 1 + source context files listed in the plan
+**Input:** `plan/plan.md` written by Stage 1 + source context files listed in the plan
 
 **Pipeline:**
 ```
-.aiready/plan.md
+plan/plan.md
     ↓
-parser.ts / planner.ts — parse GENERATE / IMPROVE / SKIP only (no re-decisions)
+planner.ts — derive ArtifactPlan[] (action + outputPath) from CANONICAL_ARTIFACTS
+             + filesystem; a legacy root artifact counts as existing → improve into docs/
     ↓
-for each actionable artifact:
-    resolveArtifactSources() — plan source_files
-      + expand if thin (<500 chars) from SUBSYSTEM SOURCES, SOURCE CONTEXT, graphify
-      + always inject graphify-ranked context when graphify-out/graph.json exists
-    build prompt from examples/ template + resolved sources + graphify context
-    LLM generates or improves (capped at 300 lines)
-    cleanLLMOutput() — strip markdown fences
-    write to target repo (skip if exists and --force not passed)
-    empty improve target → generate path (template-based fill)
+for each actionable artifact (executeArtifact):
+    generateOnly / blank-template → write examples/ template copy verbatim (no LLM)
+    otherwise → rewriteToCanonical():
+      resolveArtifactSources() (plan sources + thin-expansion + graphify)
+      per-file prompt (FILE_GUIDANCE) + template + sources + currentContent
+      LLM rewrite → cleanLLMOutput → heading correction → linkDocsReferences → 300-line cap
+    sanitisePlaceholders() → write to outputPath (docs/ or root)
+    ↓
+consolidateEntryPoints() — merge/​shim CLAUDE.md etc. into root AGENTS.md
+    ↓
+re-score (before/after delta) → suggestNoiseCleaning()
 ```
 
+**Layout (src/utils/layout.ts):**
+- Agent entry points (AGENTS.md, CLAUDE.md, .cursorrules, .windsurfrules,
+  copilot-instructions.md) and build files (Makefile, scripts/*, *.json) stay at root.
+- All other canonical markdown artifacts are written under `docs/`.
+- Cross-references between artifacts are deterministically rewritten to `docs/` paths.
+
 **Rules:**
-- Never overwrites existing files without `--force`
+- Never overwrites existing files without `--force` (a legacy root copy is preserved,
+  restructured into docs/, and surfaced via noise-cleanup — never auto-deleted)
 - Each generated artifact is capped at 300 lines
 - Uses `examples/` directory as generation templates
 - Source context files are read-only inputs — never modified
@@ -218,8 +240,10 @@ Shows a diff before writing. User confirms before any file is touched.
 
 ### audit/scorer.ts
 - MUST accept `LLMProvider` — never a raw API key
-- MUST NOT read from the filesystem directly
-- MUST NOT call `crossRef()` — scorer is pure quality, cross-ref is structural validation
+- Scoring is 100% intent-based: ONE LLM call, no structural/heading checks
+- May read templates (quality reference) and run `checkVerificationBaseline`
+  (finding only, never a score input); may call `crossRef()` to attach cross-ref results
+- MUST NOT write to the target repository
 
 ### audit/cross-ref.ts
 - MUST only validate — no scoring, no LLM calls, no output

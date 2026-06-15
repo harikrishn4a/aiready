@@ -1,12 +1,14 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js 109.54 KB (full pipeline + Stage 2 bundled)
-- Tests: 331/331 passing (23 test files)
+- Build: passing — dist/cli.js 104 KB (full pipeline + Stage 2 bundled)
+- Tests: 338/338 passing (25 test files)
 - Typecheck: clean
 - Lint: clean
-- Last verified: 2026-06-05
-- Active feature: none — **feat-020 complete**
+- Last verified: 2026-06-15
+- Active feature: none — **feat-021, feat-022 complete**
+- Live smoke: audit + init verified on ../betterworld via OpenAI gpt-4o-mini
+  (30 → 84 internal re-score; standalone post-init audit 70/100)
 
 ## Completed
 - [x] Product design and stage definitions
@@ -26,10 +28,29 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-020 complete
+- nothing — feat-022 complete
 
 ## Blocked
 - nothing
+
+## Session 12 (2026-06-15)
+- [x] **feat-021** — Intent-based scoring + canonical rewrite. Audit scorer is now
+  100% intent-based (one LLM call, "can an agent do its job with only what's
+  documented here?"); removed all structural scoring (detectFileType,
+  scoreMakefile/Shell/Json/Architecture/MarkdownStructure, scoreStructural,
+  combineScores, scoreFromBaseline, 40/60 weighting). SubsystemScore simplified to
+  { score, gaps, findings, files, baselineStatus? }. New src/init/rewriter.ts
+  (rewriteToCanonical + sanitisePlaceholders + per-file prompt dispatch from
+  INIT-COMMAND-PROMPTS.md + folded heading correction + 300-line cap) replaces
+  improver. Unified src/init/executor.ts executeArtifact() (was
+  executeGenerate/executeImprove). suggestNoiseCleaning() at end of init.
+- [x] **feat-022** — Layout: audit writes plan to plan/plan.md (was .aiready/);
+  init writes non-entry markdown artifacts under docs/; entry points (AGENTS.md,
+  CLAUDE.md, .cursorrules, .windsurfrules, copilot) + build files (Makefile,
+  scripts/, *.json) stay at root. New src/utils/layout.ts. Loader finds artifacts
+  at root or docs/. Planner adds outputPath, treats legacy root artifacts as
+  existing → restructure into docs/. rewriter.linkDocsReferences() deterministically
+  rewrites cross-references to docs/ paths.
 
 ## Backlog — Stage 1
 

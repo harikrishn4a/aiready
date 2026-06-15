@@ -202,3 +202,32 @@ Append new decisions at the bottom — never edit existing ones.
 - **Rejected alternatives**: Planner keeps subsystem-score thresholds — contradicts audit contract. Always replace plan source_files with graphify — overrides audit intent when sources are already rich.
 - **Constraints introduced**: Shared graphify ranking lives in `src/utils/graphify.ts` (audit loader + init context). Init must not write to target repos without user confirmation/`--force`.
 - **Revisit when**: Graphify schema adds richer edge-based ranking or init needs code (non-markdown) context from graph nodes.
+---
+
+### 2026-06-15: Audit scoring is 100% intent-based (no structural checks)
+
+- **Decision**: Score every subsystem with a single LLM call answering one fixed question — "Can an AI coding agent do its job using only what is documented here?" — driven by `SUBSYSTEM_INTENTS`. Remove all structural scoring: `detectFileType`, `scoreMakefile/Shell/Json/Architecture/MarkdownStructure`, `scoreStructural`, `combineScores`, `scoreFromBaseline`, and the 40/60 structural+content weighting. `SubsystemScore` becomes `{ score, gaps, findings, files, baselineStatus? }`.
+- **Reason**: Structural checks (heading coverage, required Makefile targets, etc.) rewarded shape over usefulness — a file could have all canonical headings and still be useless to an agent, and a Makefile/JSON/markdown file could each satisfy a subsystem if the content is right. Intent-based scoring measures what actually matters: can the agent act on it.
+- **Rejected alternatives**: Keep a small structural floor — reintroduces shape-over-substance bias. Per-file-type rubrics — high maintenance, still proxy metrics.
+- **Constraints introduced**: `checkVerificationBaseline` is retained but surfaced as a finding only (not a score input). Scoring quality now depends entirely on the LLM; templates are passed as quality reference, not as requirements.
+- **Revisit when**: Scores prove unstable across runs/models and a deterministic anchor is needed.
+
+---
+
+### 2026-06-15: plan/ and docs/ layout; entry points stay at root
+
+- **Decision**: Audit writes its remediation plan to `plan/plan.md` (was `.aiready/plan.md`). Init writes non-entry markdown artifacts under `docs/`; agent entry points (AGENTS.md, CLAUDE.md, .cursorrules, .windsurfrules, .github/copilot-instructions.md) and build artifacts (Makefile, scripts/*, *.json) stay at the repo root. Placement is centralised in `src/utils/layout.ts`.
+- **Reason**: Keeps the repo root clean while preserving the files agents and toolchains expect there. `make` needs the Makefile at root; agents look for AGENTS.md/CLAUDE.md at root; everything else is reference documentation that belongs under docs/.
+- **Rejected alternatives**: Move everything (including Makefile/AGENTS.md) into docs/ — breaks `make` and agent discovery. Flag-gated layout — the user wants this as the default behavior.
+- **Constraints introduced**: The loader must find canonical artifacts at root OR docs/ (so re-audit reflects init output). A legacy root artifact is treated as existing and restructured into docs/ (content preserved); the root copy is left in place and surfaced via noise-cleanup, never auto-deleted.
+- **Revisit when**: Users want configurable folder names or auto-removal of root duplicates.
+
+---
+
+### 2026-06-15: Deterministic docs cross-linking (not prompt-only)
+
+- **Decision**: After generating an artifact, deterministically rewrite bare references to docs/-bound artifacts into their docs/ path via `rewriter.linkDocsReferences()` (skips the file's own name, root files, and already-prefixed paths). The LLM prompt also carries a layout note, but the deterministic pass is the source of truth.
+- **Reason**: Telling the model where files live worked unreliably on smaller models (gpt-4o-mini left bare `PROGRESS.md` references). Agents must be able to locate artifacts; a regex pass guarantees it. Verified on betterworld: AGENTS.md went from 1 to 16 `docs/` references.
+- **Rejected alternatives**: Prompt-only instruction — unreliable. Post-hoc link checking that only warns — leaves broken references in place.
+- **Constraints introduced**: docs/-bound artifact names come from `CANONICAL_ARTIFACTS` filtered by `isDocsArtifact`; the regex must not double-prefix or rewrite root files (AGENTS.md, Makefile, *.json).
+- **Revisit when**: Artifacts gain references to files outside the canonical set that also move under docs/.
