@@ -43,8 +43,8 @@ jobs:
 
       - run: npm ci
 
-      - name: Dependency audit (production)
-        run: npm audit --omit=dev --audit-level=high
+      - name: Dependency audit
+        run: npm audit --audit-level=high
 
       - name: CodeQL init
         uses: github/codeql-action/init@v3
