@@ -405,9 +405,7 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
       }
     } else {
       const data: SubsystemScore = subsystemData ?? {
-        score: 0, structuralScore: 0, contentScore: 0,
-        presentSections: [], missingSections: [], isHarnessArtifact: false,
-        gaps: [], findings: [], files: [],
+        score: 0, gaps: [], findings: [], files: [],
       };
       improve.push(makeImproveItem(target, def, data));
     }

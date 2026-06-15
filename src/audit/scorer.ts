@@ -1,4 +1,4 @@
-import { basename, join } from 'path';
+import { join } from 'path';
 import type { LLMProvider } from '../utils/llm.js';
 import { resolveExamplesDir } from '../utils/examples-dir.js';
 import { exists, readFile as readFsFile } from '../utils/fs.js';
@@ -6,23 +6,11 @@ import type { RepoFiles } from './loader.js';
 import type { FileMapping, Subsystem } from './mapper.js';
 import { crossRef } from './cross-ref.js';
 import type { CrossRefResult } from './cross-ref.js';
-import {
-  loadTemplates, extractSectionHeadings, TEMPLATE_SUBSYSTEM_MAP,
-  detectFileType,
-  REQUIRED_MAKEFILE_TARGETS,
-  REQUIRED_INIT_SH_PATTERNS,
-  REQUIRED_VERIFY_SH_PATTERNS,
-  REQUIRED_JSON_KEYS,
-} from './templates.js';
+import { loadTemplates } from './templates.js';
 import type { LoadedTemplates } from './templates.js';
 
 export interface SubsystemScore {
   score: number;
-  structuralScore: number;
-  contentScore: number;
-  presentSections: string[];
-  missingSections: string[];
-  isHarnessArtifact: boolean;
   gaps: string[];
   findings: Finding[];
   files: string[];
@@ -55,49 +43,70 @@ export interface ScoredResult {
 
 const SUBSYSTEMS: Subsystem[] = ['identity', 'verification', 'state', 'memory', 'constraints'];
 
-// Build a compact section list from a template for inclusion in system prompt
-function templateSectionSummary(subsystem: string, templates: LoadedTemplates): string {
-  const primaryFiles = TEMPLATE_SUBSYSTEM_MAP[subsystem]?.primary ?? [];
-  const parts: string[] = [];
-  for (const file of primaryFiles) {
-    const secs = templates.sections[file];
-    if (secs && secs.length > 0) {
-      parts.push(`${file}: ${secs.join(' | ')}`);
-    }
-  }
-  return parts.length > 0 ? parts.join('\n') : '(no sections defined)';
-}
+// The single intent-based scoring question per subsystem. Scoring is 100%
+// about whether an agent can do its job using only what is documented —
+// not about file names, heading names, or structural conventions.
+const SUBSYSTEM_INTENTS: Record<Subsystem, string> = {
+  identity: `Agent knows what the project is, what problem it solves, the tech
+    stack with versions, and where key files live — it can orient itself in
+    under 60 seconds.`,
+
+  verification: `Agent has a single runnable command to confirm its work is
+    correct, knows what passing looks like, and can find that command without
+    exploring the repo.`,
+
+  state: `Agent can resume a session without asking questions. Knows what is
+    done, what is in progress, what is blocked, and what the next task is. No
+    blind spots.`,
+
+  memory: `Agent can navigate the codebase without exploring it manually. Knows
+    the module map, what each module does, key files, and how data flows
+    through the system.`,
+
+  constraints: `Agent knows what it must never do in this repository. Hard
+    limits are explicit, specific, and use MUST/MUST NOT language.`,
+};
 
 function buildScoringSystemPrompt(templates: LoadedTemplates): string {
-  const templateSummaries = SUBSYSTEMS.map((sub) =>
-    `${sub.toUpperCase()}:\n${templateSectionSummary(sub, templates)}`,
-  ).join('\n\n');
+  const templateContext = SUBSYSTEMS
+    .map((subsystem) => {
+      const content = (templates.primary[subsystem] ?? '').slice(0, 800);
+      return `${subsystem.toUpperCase()} reference:\n${content}`;
+    })
+    .join('\n\n---\n\n');
 
-  return `You are scoring AI agent harness artifacts against their canonical template standards.
+  return `You are scoring an AI agent harness repository.
 
-TEMPLATE REFERENCE — ideal section structure per subsystem:
-${templateSummaries}
+For each of the 5 subsystems, answer ONE question:
+"Can an AI coding agent do its job using only what is documented here?"
+
+SUBSYSTEM INTENTS:
+${SUBSYSTEMS.map((k) => `${k}: ${SUBSYSTEM_INTENTS[k]}`).join('\n\n')}
 
 SCORING RULES:
-- A file scores well when it follows the template structure and fills sections with real, specific content.
-- A workflow doc, changelog, or implementation log scores MAX 20 even if well-written — these are not harness artifacts.
-- Partial credit when content is present in a non-canonical file: score the actual content quality, warn about location.
-- If constraints content exists inside AGENTS.md / CLAUDE.md, score the constraint content — do not return 0.
-- For each subsystem: is_harness_artifact=true only if the file is intentionally written as an agent harness file.
+- Score 0-100 based purely on content usefulness to an agent
+- Ignore file names, heading names, and structural conventions
+- A Makefile, shell script, markdown file, or JSON file can all satisfy a
+  subsystem equally well if the content is right
+- Partial credit when content exists but is incomplete or hard to find
+- A workflow doc or changelog scores max 20 — these are not harness artifacts
+- For each subsystem, return specific gaps an agent would notice
 
-Return ONLY valid JSON with this exact structure:
+TEMPLATE REFERENCE (quality examples — headings are suggestions not requirements):
+${templateContext}
+
+Return ONLY valid JSON:
 {
-  "identity":     { "score": 0-100, "is_harness_artifact": true|false, "findings": [{"type":"pass"|"warn"|"fail","message":"..."}] },
-  "verification": { "score": 0-100, "is_harness_artifact": true|false, "findings": [] },
-  "state":        { "score": 0-100, "is_harness_artifact": true|false, "findings": [] },
-  "memory":       { "score": 0-100, "is_harness_artifact": true|false, "findings": [] },
-  "constraints":  { "score": 0-100, "is_harness_artifact": true|false, "findings": [] }
+  "identity":     { "score": 0-100, "gaps": ["specific gap..."], "findings": [{"type":"pass"|"warn"|"fail","message":"..."}] },
+  "verification": { "score": 0-100, "gaps": [], "findings": [] },
+  "state":        { "score": 0-100, "gaps": [], "findings": [] },
+  "memory":       { "score": 0-100, "gaps": [], "findings": [] },
+  "constraints":  { "score": 0-100, "gaps": [], "findings": [] }
 }`;
 }
 
 interface LLMScoreEntry {
   score: number;
-  is_harness_artifact?: boolean;
   findings?: Finding[];
   gaps?: string[];
 }
@@ -134,198 +143,24 @@ function normalizeFindings(entry: LLMScoreEntry): Finding[] {
   return [];
 }
 
-export function scoreMakefileStructure(
-  content: string,
-): { score: number; present: string[]; missing: string[] } {
-  const definedTargets = (content.match(/^[a-zA-Z][a-zA-Z0-9_-]*:/gm) ?? [])
-    .map((t) => t.replace(':', '').trim());
-
-  const present: string[] = [];
-  const missing: string[] = [];
-
-  for (const required of REQUIRED_MAKEFILE_TARGETS) {
-    const options = required.split('|');
-    const found = options.find((opt) => definedTargets.includes(opt));
-    if (found) present.push(found);
-    else missing.push(required);
-  }
-
-  return {
-    score: Math.round((present.length / REQUIRED_MAKEFILE_TARGETS.length) * 100),
-    present,
-    missing,
-  };
-}
-
-export function scoreShellStructure(
-  filename: string,
-  content: string,
-): { score: number; present: string[]; missing: string[] } {
-  const base = basename(filename);
-  const patterns = base.includes('init') ? REQUIRED_INIT_SH_PATTERNS : REQUIRED_VERIFY_SH_PATTERNS;
-  const present: string[] = [];
-  const missing: string[] = [];
-
-  for (const pattern of patterns) {
-    if (pattern.test(content)) present.push(pattern.source);
-    else missing.push(pattern.source);
-  }
-
-  return {
-    score: Math.round((present.length / patterns.length) * 100),
-    present,
-    missing,
-  };
-}
-
-export function scoreJsonStructure(
-  filename: string,
-  content: string,
-): { score: number; present: string[]; missing: string[] } {
-  const base = basename(filename);
-  const requiredKeys = REQUIRED_JSON_KEYS[base] ?? [];
-
-  if (requiredKeys.length === 0) return { score: 100, present: [], missing: [] };
-
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(content) as Record<string, unknown>;
-  } catch {
-    return { score: 0, present: [], missing: requiredKeys };
-  }
-
-  const present = requiredKeys.filter((k) => k in parsed);
-  const missing = requiredKeys.filter((k) => !(k in parsed));
-  return {
-    score: Math.round((present.length / requiredKeys.length) * 100),
-    present,
-    missing,
-  };
-}
-
-export function scoreArchitectureStructure(
-  content: string,
-): { score: number; present: string[]; missing: string[] } {
-  const checks = [
-    { name: 'Responsibilities sections', pass: /Responsibilities/i.test(content) },
-    { name: 'Must NOT boundaries',       pass: /Must NOT|MUST NOT/i.test(content) },
-    { name: 'Module map or table',       pass: /\|.*\|.*\|/m.test(content) },
-    { name: 'Data flow documentation',   pass: /→|->|data flow|pipeline/i.test(content) },
-  ];
-  const present = checks.filter((c) => c.pass).map((c) => c.name);
-  const missing = checks.filter((c) => !c.pass).map((c) => c.name);
-  return {
-    score: Math.round((present.length / checks.length) * 100),
-    present,
-    missing,
-  };
-}
-
-function scoreMarkdownStructure(
-  content: string,
-  templateSections: string[],
-): { score: number; present: string[]; missing: string[] } {
-  if (templateSections.length === 0) {
-    return { score: 0, present: [], missing: [] };
-  }
-
-  const fileSections = extractSectionHeadings(content);
-  const present: string[] = [];
-  const missing: string[] = [];
-
-  for (const section of templateSections) {
-    const sectionLower = section.toLowerCase();
-    const found = fileSections.some(
-      (s) => s.toLowerCase().includes(sectionLower) || sectionLower.includes(s.toLowerCase()),
-    );
-    if (found) present.push(section);
-    else missing.push(section);
-  }
-
-  return {
-    score: Math.round((present.length / templateSections.length) * 100),
-    present,
-    missing,
-  };
-}
-
-export function scoreStructural(
-  filename: string,
-  fileContent: string,
-  templateSections: string[],
-): { score: number; present: string[]; missing: string[] } {
-  const fileType = detectFileType(filename);
-  switch (fileType) {
-    case 'makefile':
-      return scoreMakefileStructure(fileContent);
-    case 'shell':
-      return scoreShellStructure(filename, fileContent);
-    case 'json':
-      return scoreJsonStructure(filename, fileContent);
-    case 'markdown': {
-      const base = basename(filename).toLowerCase();
-      if (base === 'architecture.md') return scoreArchitectureStructure(fileContent);
-      return scoreMarkdownStructure(fileContent, templateSections);
-    }
-    default:
-      return scoreMarkdownStructure(fileContent, templateSections);
-  }
-}
-
-export function combineScores(structuralScore: number, contentScore: number): number {
-  return Math.round(structuralScore * 0.4 + contentScore * 0.6);
-}
-
-function emptyScore(templateSections: string[]): SubsystemScore {
-  const message = 'No file found serving this subsystem';
-  return {
-    score: 0,
-    structuralScore: 0,
-    contentScore: 0,
-    presentSections: [],
-    missingSections: templateSections,
-    isHarnessArtifact: false,
-    gaps: [message],
-    findings: [{ type: 'fail', message }],
-    files: [],
-  };
-}
-
 function buildSubsystemContent(
   subsystem: Subsystem,
   mdFiles: RepoFiles['mdFiles'],
   mappings: FileMapping[],
-): { files: string[]; content: string; fileContents: Map<string, string> } {
+): { files: string[]; content: string } {
   const mappedPaths = mappings.filter((m) => m.subsystems.includes(subsystem)).map((m) => m.path);
-  if (mappedPaths.length === 0) return { files: [], content: '', fileContents: new Map() };
+  if (mappedPaths.length === 0) return { files: [], content: '' };
 
   const fileMap = new Map(mdFiles.map((f) => [f.path, f.fullContent]));
   const sections = mappedPaths.map((p) => {
     const content = fileMap.get(p) ?? '';
     return `=== ${p} ===\n${content}`;
   });
-  const fileContents = new Map(mappedPaths.map((p) => [p, fileMap.get(p) ?? '']));
-  return { files: mappedPaths, content: sections.join('\n\n'), fileContents };
+  return { files: mappedPaths, content: sections.join('\n\n') };
 }
 
-function getTemplateSectionsForSubsystem(subsystem: string, templates: LoadedTemplates): string[] {
-  const primaryFiles = TEMPLATE_SUBSYSTEM_MAP[subsystem]?.primary ?? [];
-  const allSections: string[] = [];
-  for (const file of primaryFiles) {
-    const secs = templates.sections[file];
-    if (secs) allSections.push(...secs);
-  }
-  return [...new Set(allSections)];
-}
-
-export function scoreFromBaseline(baseline: BaselineCheck): number {
-  if (baseline.status === 'established') return 90;
-  if (baseline.status === 'partial') {
-    return baseline.commandExists && baseline.documented ? 60 : 40;
-  }
-  return 10;
-}
-
+// Verification baseline — surfaced to the user as a finding only. It is NOT a
+// score input: scoring is 100% intent-based via the LLM.
 export async function checkVerificationBaseline(
   targetDir: string,
   agentsMdContent: string | null,
@@ -414,111 +249,73 @@ export async function scoreRepo(
   provider: LLMProvider,
   examplesDir?: string,
 ): Promise<ScoredResult> {
+  // Templates loaded only to give the LLM quality reference content —
+  // never used for structural checks.
   const templates = await loadTemplates(examplesDir ?? resolveExamplesDir());
 
-  // Build per-subsystem content
   const subsystemContents = SUBSYSTEMS.map((s) => ({
     subsystem: s,
     ...buildSubsystemContent(s, files.mdFiles, mappings),
   }));
 
-  // Compute structural scores deterministically (no LLM needed)
-  const structuralScores: Record<string, ReturnType<typeof scoreStructural>> = {};
-  for (const { subsystem, files: subsysFiles, fileContents } of subsystemContents) {
-    const templateSections = getTemplateSectionsForSubsystem(subsystem, templates);
-    if (subsysFiles.length === 0) {
-      structuralScores[subsystem] = { score: 0, present: [], missing: templateSections };
-    } else {
-      const perFile = subsysFiles.map((f) =>
-        scoreStructural(f, fileContents.get(f) ?? '', templateSections),
-      );
-      const avgScore = Math.round(perFile.reduce((sum, r) => sum + r.score, 0) / perFile.length);
-      const present = [...new Set(perFile.flatMap((r) => r.present))];
-      const missing = [...new Set(perFile.flatMap((r) => r.missing))].filter((m) => !present.includes(m));
-      structuralScores[subsystem] = { score: avgScore, present, missing };
-    }
-  }
-
-  // One LLM call for content quality scoring (template-aware)
   const contentSections = subsystemContents
     .map(({ subsystem, content }) => {
-      if (!content) return `### ${subsystem}\n(no files mapped)`;
-      return `### ${subsystem}\n${content}`;
+      if (!content) return `### ${subsystem}\n(no files mapped to this subsystem)`;
+      return `### ${subsystem}\n${content.slice(0, 3000)}`;
     })
     .join('\n\n');
 
+  // Single LLM call scores all 5 subsystems intent-based.
   const text = await provider.chat(
     buildScoringSystemPrompt(templates),
-    `Score this repository's AI harness across all 5 subsystems:\n\n${contentSections}`,
+    `Score this repository's AI harness:\n\n${contentSections}`,
     { fast: false },
   );
 
   const llmScores = parseScorerResponse(text);
 
+  // Verification baseline as finding only — not a score input.
   const packageJsonScripts = (files.packageJson?.scripts ?? null) as Record<string, unknown> | null;
   const baseline = await checkVerificationBaseline(files.targetDir, files.agentsMd, packageJsonScripts);
 
   function toSubsystemScore(key: Subsystem): SubsystemScore {
-    const templateSections = getTemplateSectionsForSubsystem(key, templates);
-    const structural = structuralScores[key] ?? { score: 0, present: [], missing: templateSections };
     const { files: subsysFiles } = subsystemContents.find((s) => s.subsystem === key) ?? { files: [] };
 
     if (subsysFiles.length === 0 && key !== 'verification') {
-      return emptyScore(templateSections);
-    }
-
-    if (key === 'verification') {
-      const contentScore = scoreFromBaseline(baseline);
-      const finalScore = combineScores(structural.score, contentScore);
-      const gaps = baseline.findings
-        .filter((f) => f.type === 'warn' || f.type === 'fail')
-        .map((f) => f.message);
+      const message = 'No file found serving this subsystem';
       return {
-        score: finalScore,
-        structuralScore: structural.score,
-        contentScore,
-        presentSections: structural.present,
-        missingSections: structural.missing,
-        isHarnessArtifact: baseline.commandExists,
-        gaps,
-        findings: baseline.findings,
-        files: subsysFiles,
-        baselineStatus: baseline.status,
+        score: 0,
+        gaps: [message],
+        findings: [{ type: 'fail', message }],
+        files: [],
       };
     }
 
     const entry = llmScores[key];
     if (!entry) {
+      const message = 'LLM did not score this subsystem';
       return {
         score: 0,
-        structuralScore: structural.score,
-        contentScore: 0,
-        presentSections: structural.present,
-        missingSections: structural.missing,
-        isHarnessArtifact: false,
-        gaps: ['LLM did not return a score for this subsystem'],
-        findings: [{ type: 'fail', message: 'LLM did not return a score for this subsystem' }],
+        gaps: [message],
+        findings: key === 'verification'
+          ? [{ type: 'fail', message }, ...baseline.findings]
+          : [{ type: 'fail', message }],
         files: subsysFiles,
+        baselineStatus: key === 'verification' ? baseline.status : undefined,
       };
     }
 
-    const findings = normalizeFindings(entry);
-    const rawContentScore = Math.min(100, Math.max(0, Math.round(entry.score)));
-    const isHarness = entry.is_harness_artifact !== false; // default true if not specified
-    const contentScore = isHarness ? rawContentScore : Math.min(rawContentScore, 20);
-    const finalScore = combineScores(structural.score, contentScore);
-    const gaps = findings.filter((f) => f.type === 'warn' || f.type === 'fail').map((f) => f.message);
+    // For verification, merge baseline findings into the LLM findings.
+    const findings = key === 'verification'
+      ? [...normalizeFindings(entry), ...baseline.findings]
+      : normalizeFindings(entry);
 
     return {
-      score: finalScore,
-      structuralScore: structural.score,
-      contentScore,
-      presentSections: structural.present,
-      missingSections: structural.missing,
-      isHarnessArtifact: isHarness,
-      gaps,
+      score: Math.min(100, Math.max(0, Math.round(entry.score))),
+      gaps: entry.gaps ?? [],
       findings,
       files: subsysFiles,
+      baselineStatus: key === 'verification' ? baseline.status : undefined,
     };
   }
 

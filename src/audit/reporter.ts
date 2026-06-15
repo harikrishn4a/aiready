@@ -1,4 +1,4 @@
-import type { ScoredResult, SubsystemScore } from './scorer.js';
+import type { ScoredResult, SubsystemScore, Finding } from './scorer.js';
 import type { RemediationPlan } from './remediation.js';
 
 export interface ReportOptions {
@@ -20,11 +20,16 @@ function abbreviateFiles(files: string[]): string {
   return `${names.slice(0, 2).join(', ')} +${names.length - 2} more`;
 }
 
+function findingGlyph(type: Finding['type']): string {
+  if (type === 'pass') return '✓';
+  if (type === 'warn') return '⚠';
+  return '✗';
+}
+
 function subsystemLines(name: string, sub: SubsystemScore): string[] {
   const scoreStr = String(sub.score).padStart(3);
-  const summary = sub.gaps.length > 0 ? sub.gaps[0] : 'All checks passed';
   const lines: string[] = [
-    `${name.padEnd(14)} ${scoreStr}  ${bar(sub.score)}`,
+    `${name.toUpperCase().padEnd(16)} ${bar(sub.score)}  ${scoreStr}`,
     `  Files: ${abbreviateFiles(sub.files)}`,
   ];
 
@@ -32,17 +37,16 @@ function subsystemLines(name: string, sub: SubsystemScore): string[] {
     lines.push(`  Baseline: ${sub.baselineStatus}`);
   }
 
-  const present = sub.presentSections?.length ?? 0;
-  const missing = sub.missingSections?.length ?? 0;
-  if (present + missing > 0) {
-    const missingNames = sub.missingSections?.slice(0, 3) ?? [];
-    const missingPart = missing > 0
-      ? ` — missing: ${missingNames.join(', ')}${missing > 3 ? '…' : ''}`
-      : '';
-    lines.push(`  Sections: ${present}/${present + missing}${missingPart}`);
+  const findings = sub.findings ?? [];
+  if (findings.length > 0) {
+    for (const f of findings.slice(0, 5)) {
+      lines.push(`  ${findingGlyph(f.type)} ${f.message}`);
+    }
+  } else {
+    const summary = sub.gaps.length > 0 ? sub.gaps[0] : 'All checks passed';
+    lines.push(`  Note: ${summary}`);
   }
 
-  lines.push(`  Note: ${summary}`);
   return lines;
 }
 

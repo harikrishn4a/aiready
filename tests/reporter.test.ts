@@ -43,11 +43,11 @@ describe('report — terminal output', () => {
 
   it('prints all 5 subsystem names', () => {
     report(makeScored(), { json: false });
-    expect(output).toContain('identity');
-    expect(output).toContain('verification');
-    expect(output).toContain('state');
-    expect(output).toContain('memory');
-    expect(output).toContain('constraints');
+    expect(output).toContain('IDENTITY');
+    expect(output).toContain('VERIFICATION');
+    expect(output).toContain('STATE');
+    expect(output).toContain('MEMORY');
+    expect(output).toContain('CONSTRAINTS');
   });
 
   it('prints bar characters', () => {
@@ -62,9 +62,9 @@ describe('report — terminal output', () => {
 
   it('prints subsystem details on separate lines', () => {
     report(makeScored(), { json: false });
-    expect(output).toContain('identity');
+    expect(output).toContain('IDENTITY');
     expect(output).toContain('  Files: AGENTS.md');
-    expect(output).toContain('  Note: gap at 80');
+    expect(output).toContain('gap at 80');
   });
 
   it('prints (no files) when subsystem has no files', () => {
@@ -111,22 +111,21 @@ describe('report — terminal output', () => {
     expect(output.length).toBeGreaterThan(100);
   });
 
-  it('prints section coverage when presentSections and missingSections are available', () => {
+  it('prints findings with glyphs for each subsystem', () => {
     report(makeScored({
       identity: {
-        score: 70, gaps: [], files: ['AGENTS.md'],
-        structuralScore: 70, contentScore: 70,
-        presentSections: ['Stack', 'Verification commands', 'Repo structure'],
-        missingSections: ['Current stage', 'Completion gate'],
-        isHarnessArtifact: true,
-        findings: [],
+        score: 70, gaps: ['needs version'], files: ['AGENTS.md'],
+        findings: [
+          { type: 'pass', message: 'Project description documented' },
+          { type: 'warn', message: 'Stack versions not pinned' },
+        ],
       },
     }), { json: false });
-    expect(output).toContain('Sections: 3/5');
-    expect(output).toContain('missing: Current stage, Completion gate');
+    expect(output).toContain('✓ Project description documented');
+    expect(output).toContain('⚠ Stack versions not pinned');
   });
 
-  it('omits Sections line when no template data available', () => {
+  it('no longer prints structural section coverage', () => {
     report(makeScored(), { json: false });
     expect(output).not.toContain('Sections:');
   });
