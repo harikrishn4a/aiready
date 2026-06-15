@@ -13,18 +13,18 @@ Distributed via npx — zero install required.
 
 | Stage | Command | What it does | Status |
 |---|---|---|---|
-| 1 | `npx aiready audit` | LLM-powered audit — scores 5 harness subsystems, writes `.aiready/plan.md` | **complete** |
+| 1 | `npx aiready audit` | LLM-powered audit — scores 5 harness subsystems, writes `plan/plan.md` | **complete** |
 | 2 | `npx aiready init` | Reads plan.md + source context, generates missing harness artifacts | **current** |
 | 3 | `npx aiready analyze` | Reads code + Graphify graph, finds undocumented intent, writes `.aiready/gaps.md` | not started |
 | 4 | `npx aiready drift` | Reads harness + git history, finds stale docs, writes `.aiready/drift.md` | not started |
 | 5 | `npx aiready fix` | Reads plan/gaps/drift, patches exactly what's wrong, shows diff before write | not started |
 
-See `ARCHITECTURE.md` for full design detail on each stage.
+See `docs/ARCHITECTURE.md` for full design detail on each stage.
 
 ## Current stage
 Stage 2 — `npx aiready init`
 
-Reads `.aiready/plan.md` (written by Stage 1) and source context files
+Reads `plan/plan.md` (written by Stage 1) and source context files
 listed in the plan. Generates or improves missing harness artifacts using
 the LLM. Each generated artifact is capped at 300 lines. Never overwrites
 existing files unless `--force` is passed.
@@ -44,43 +44,35 @@ existing files unless `--force` is passed.
 aiready/
   src/
     audit/           ← Stage 1: LLM audit pipeline
-      index.ts       ← audit command handler
-      loader.ts      ← reads repo files, Graphify integration
-      mapper.ts      ← triage + classify markdown files to subsystems
-      scorer.ts      ← LLM quality scoring per subsystem
-      cross-ref.ts   ← validates docs vs project reality
-      reporter.ts    ← terminal + JSON output
-      remediation.ts ← generates .aiready/plan.md
-    init/            ← Stage 2: artifact generation (in progress)
+    init/            ← Stage 2: artifact generation
     analyze/         ← Stage 3: semantic gap analysis (stub)
     drift/           ← Stage 4: drift detection (stub)
     fix/             ← Stage 5: auto-remediation (stub)
     cli.ts           ← Commander entrypoint
     utils/
-      llm.ts         ← LLMProvider interface + Anthropic/OpenAI/Ollama impls
-      prompt.ts      ← interactive provider/model selection
-      models.ts      ← versioned model lists
-      tokens.ts      ← token estimation
-      spinner.ts     ← TTY-only sea-green spinner
-      fs.ts          ← filesystem helpers
-      detect.ts      ← stack and package manager detection
   examples/          ← harness templates (reference for Stage 2 generation)
   tests/
-  AGENTS.md          ← this file
-  PROGRESS.md        ← project state
-  SESSION-HANDOFF.md ← last session state
-  DECISIONS.md       ← key design choices with rationale
-  ARCHITECTURE.md    ← full stage design and data flow
-  feature_list.json  ← feature tracker
+  AGENTS.md          ← this file (repo root entry point)
+  feature_list.json  ← feature tracker (repo root)
+  docs/
+    ARCHITECTURE.md
+    PROGRESS.md
+    SESSION-HANDOFF.md
+    DECISIONS.md
+    TASK.md
+    features.md
+    structure.md
 ```
+
+See `docs/structure.md` for artifact ownership and layout rules.
 
 ---
 
 ## Session start
 1. Run `pwd` — confirm you are in the repo root
 2. Read this file completely
-3. Read `PROGRESS.md` — understand current state
-4. Read `SESSION-HANDOFF.md` — see what the last session left
+3. Read `docs/PROGRESS.md` — understand current state
+4. Read `docs/SESSION-HANDOFF.md` — see what the last session left
 5. Run `git log --oneline -5` — see recent changes
 6. Run `npm run build && npm test` — confirm baseline is not broken
 7. Read `feature_list.json` — identify the current active feature
@@ -90,11 +82,11 @@ If baseline verification is failing, repair that first before adding new scope.
 
 ## Session end
 1. Run full verification (see Verification Commands below)
-2. Update `PROGRESS.md` if a feature completed, was added, or got blocked
+2. Update `docs/PROGRESS.md` if a feature completed, was added, or got blocked
 3. Update `feature_list.json` — set new status and record evidence
-4. Overwrite `SESSION-HANDOFF.md` with this session's state
-5. If a key decision was made, append it to `DECISIONS.md`
-6. **Update `ARCHITECTURE.md`** if any of the following changed:
+4. Overwrite `docs/SESSION-HANDOFF.md` with this session's state
+5. If a key decision was made, append it to `docs/DECISIONS.md`
+6. **Update `docs/ARCHITECTURE.md`** if any of the following changed:
    - A new module was added or renamed
    - A stage pipeline changed
    - A layer boundary rule changed
@@ -103,9 +95,9 @@ If baseline verification is failing, repair that first before adding new scope.
 
 ## Working rules
 - One active feature at a time — never work on two features in parallel
-- Before starting a feature, generate a sprint contract and save it to `TASK.md`
+- Before starting a feature, generate a sprint contract and save it to `docs/TASK.md`
 - Do not claim completion without runnable verification evidence
-- Do not rewrite `PROGRESS.md` to hide unfinished work
+- Do not rewrite `docs/PROGRESS.md` to hide unfinished work
 - Do not remove or weaken tests to make a task appear complete
 - Stay in scope — do not modify files unrelated to the current feature
 
@@ -125,19 +117,21 @@ npm test          # vitest, must pass
 ```
 
 ## Escalation
-- **Architecture decisions**: Check `DECISIONS.md`, then ask the user
-- **Unclear requirements**: Check `SESSION-HANDOFF.md` and `TASK.md`, then ask the user
+- **Architecture decisions**: Check `docs/DECISIONS.md`, then ask the user
+- **Unclear requirements**: Check `docs/SESSION-HANDOFF.md` and `docs/TASK.md`, then ask the user
 - **Repeated failures**: Mark feature as blocked in `feature_list.json`, flag for human review
-- **Scope ambiguity**: Re-read `TASK.md` sprint contract before expanding scope
+- **Scope ambiguity**: Re-read `docs/TASK.md` sprint contract before expanding scope
 
 ## Constraints — never do these
+- MUST keep `AGENTS.md` at the repo root — MUST NOT move it to `docs/`
+- MUST store all other harness markdown under `docs/` (e.g. `docs/ARCHITECTURE.md`, `docs/PROGRESS.md`)
 - MUST NOT write to the target repo without `--force` or explicit user confirmation
 - MUST NOT run verification commands in the target repo automatically
 - MUST NOT overwrite existing harness files in the target repo unless `--force` is passed
-- MUST NOT add new dependencies without recording the decision in `DECISIONS.md`
+- MUST NOT add new dependencies without recording the decision in `docs/DECISIONS.md`
 - MUST NOT claim completion without runnable evidence
 - MUST NOT implement a future stage while the current stage is in progress
-- MUST NOT let `ARCHITECTURE.md` drift — update it at session end when anything structural changes
+- MUST NOT let `docs/ARCHITECTURE.md` drift — update it at session end when anything structural changes
 
 ## Error message format
 All errors emitted by the CLI must follow this structure:

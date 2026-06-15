@@ -12,7 +12,7 @@
 
 ## Completed
 - [x] Product design and stage definitions
-- [x] AGENTS.md, ARCHITECTURE.md, DECISIONS.md
+- [x] AGENTS.md (root), docs/ARCHITECTURE.md, docs/DECISIONS.md
 - [x] Example harness templates in examples/
 - [x] **feat-000** — Project scaffold (build/test/typecheck/lint all passing)
 - [x] **feat-001** — Audit loader: loadRepo() reads target repo into typed RepoFiles struct; now also walks all .md files into mdFiles[]

@@ -280,4 +280,4 @@ Shows a diff before writing. User confirms before any file is touched.
 | `eslint` | Linting |
 
 ## Decision log
-See `DECISIONS.md` for rationale on key architectural choices.
+See `docs/DECISIONS.md` for rationale on key architectural choices.
