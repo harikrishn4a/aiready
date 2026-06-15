@@ -1,8 +1,8 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js ~115 KB (full pipeline + Stage 2 bundled)
-- Tests: 357/357 passing (26 test files)
+- Build: passing — dist/cli.js ~117 KB (full pipeline + Stage 2 bundled)
+- Tests: 358/358 passing (26 test files)
 - Typecheck: clean
 - Lint: clean
 - Last verified: 2026-06-15
@@ -68,6 +68,19 @@
   (4) stack-aware files: prompt names the repo + deterministic stripRepoPrefix() —
   Makefile recipes clean (0 `cd <repo>` / `<repo>/`). Note: init does NOT run a
   quality correction loop (deterministic heading/tab/placeholder/docs-link fixups only).
+
+## feat-024 — Discovery + triage + feature artifacts (in progress)
+- [x] **Phase A — content-based discovery layer.** Sources are found by *content*,
+  not a per-subsystem name list. loader unions full md-walk + root config/manifest
+  files + .github/workflows + scripts/ + graph ranking (graphify is a booster, no
+  longer replaces the walk — which had hidden FEATURE_PLAN.md). mapper always triages
+  but force-keeps seed files and classifies by content; prompts broadened beyond
+  markdown (manifests→identity, CI/build→verification). fs skips cache/venv/tool-output
+  dirs. remediation prioritises + caps subsystem sources to 12. isPlanPath no longer
+  matches a user's root plan.md. Verified on betterworld: FEATURE_PLAN.md/requirements.txt/
+  Dockerfile/Makefile/pytest.ini now discovered into the right subsystems.
+- [ ] Phase B — non-verbatim feature artifacts (features.md/feature_list.json from sources).
+- [ ] Phase C — gap triage (human / Stage-3-code / Stage-2 categories in plan.md + CLI).
 
 ## Backlog — Stage 1
 
