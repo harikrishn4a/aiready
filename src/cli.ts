@@ -15,8 +15,10 @@ program
   .command('graph')
   .description('Build a repo knowledge graph with graphify (installs it if missing)')
   .option('-t, --target <dir>', 'target directory', '.')
-  .action((opts: { target: string }) => {
-    runGraph(opts.target).catch((err: unknown) => {
+  .option('--backend <name>', 'graphify LLM backend: claude | openai | gemini | ollama (auto-detected from .env if omitted)')
+  .option('--model <id>', 'graphify model id (backend-specific; uses the backend default if omitted)')
+  .action((opts: { target: string; backend?: string; model?: string }) => {
+    runGraph(opts.target, { backend: opts.backend, model: opts.model }).catch((err: unknown) => {
       process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);
     });

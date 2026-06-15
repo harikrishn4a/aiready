@@ -30,19 +30,24 @@ OPENAI_API_KEY=
 ANTHROPIC_API_KEY=
 ```
 
-**3. Build the repo graph** — aiready uses [graphify](https://graphify.net) to map your codebase. `aiready graph` installs graphify automatically if it's missing.
+**3. Build the repo graph** (recommended) — aiready uses [graphify](https://graphify.net) to map your codebase. `aiready graph` installs graphify automatically if it's missing.
 
 ```bash
-aiready graph
+aiready graph                                   # uses whichever key you set in step 2
+aiready graph --backend claude --model <id>     # or choose a specific backend/model
 ```
 
-> Code is analysed locally; docs/PDFs/images use the API key from your `.env`. Recommended models: Claude Sonnet/Opus or GPT‑5.5.
+> graphify analyses **code fully locally** (no LLM needed); **docs, PDFs, and images** need an LLM, which it runs with the API key from your `.env` (step 2). It auto-detects the backend from your key, or you can pick one with `--backend` (`claude` / `openai` / `gemini` / `ollama`) and `--model`.
+>
+> If this step fails or you skip it, that's fine — see step 4.
 
 **4. Audit** — score the repo and write a gap analysis to `plan/plan.md`.
 
 ```bash
 aiready audit
 ```
+
+> The graph is **recommended, not required**. With it, source discovery is semantically ranked. Without it, `aiready audit` falls back to a content scan of your markdown and config files — it still works, but discovery is less precise and may miss or mis-rank sources.
 
 **5. Initialise artifacts** — generate the harness from the context already in your repo.
 
@@ -71,9 +76,10 @@ A score of **70–80 after `init` is the healthy target** for this stage: `init`
                       ┌─────────────────────────────────────────┐
    your repo  ──────► │  aiready graph   (wraps graphify)        │ ──► graphify-out/
                       │  builds a local knowledge graph          │     graph.json
+                      │  — recommended, not required —           │
                       └─────────────────────────────────────────┘
                                         │  semantic map of code + docs
-                                        ▼
+                                        ▼  (audit also runs without it: content-scan fallback)
                       ┌─────────────────────────────────────────┐
                       │  aiready audit                           │
                       │  1. discover sources (graph + content    │ ──► plan/plan.md
