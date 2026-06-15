@@ -55,6 +55,25 @@ function subsystemLines(name: string, sub: SubsystemScore): string[] {
   return lines;
 }
 
+const TRIAGE_LABELS: Array<{ category: 'human' | 'code' | 'docs'; heading: string }> = [
+  { category: 'human', heading: 'Needs human input:' },
+  { category: 'code', heading: 'Resolve in Stage 3 (analyze — reads code):' },
+  { category: 'docs', heading: 'Stage 2 can address (documentation):' },
+];
+
+function triageLines(triage: Array<{ subsystem: string; gap: string; category: string }>): string[] {
+  const lines: string[] = ['Gap triage:'];
+  for (const { category, heading } of TRIAGE_LABELS) {
+    const items = triage.filter((g) => g.category === category);
+    if (items.length === 0) continue;
+    lines.push(`  ${heading}`);
+    for (const item of items) {
+      lines.push(`    • [${item.subsystem}] ${item.gap}`);
+    }
+  }
+  return lines;
+}
+
 function getRecommendation(scored: ScoredResult): string {
   const subsystems = [
     { name: 'identity', score: scored.identity.score },
@@ -144,6 +163,11 @@ export function report(scored: ScoredResult, opts: ReportOptions): void {
     criticalGaps.forEach((gap, i) => {
       lines.push(`  ${i + 1}. ${gap}`);
     });
+  }
+
+  if (opts.remediation && opts.remediation.gapTriage.length > 0) {
+    lines.push('');
+    lines.push(...triageLines(opts.remediation.gapTriage));
   }
 
   lines.push('');

@@ -9,9 +9,17 @@ import type { CrossRefResult } from './cross-ref.js';
 import { loadTemplates } from './templates.js';
 import type { LoadedTemplates } from './templates.js';
 
+export type GapCategory = 'human' | 'code' | 'docs';
+
+export interface GapTriageItem {
+  gap: string;
+  category: GapCategory;
+}
+
 export interface SubsystemScore {
   score: number;
   gaps: string[];
+  gapTriage: GapTriageItem[];
   findings: Finding[];
   files: string[];
   baselineStatus?: 'established' | 'partial' | 'missing';
@@ -92,6 +100,14 @@ SCORING RULES:
 - A workflow doc or changelog scores max 20 — these are not harness artifacts
 - For each subsystem, return specific gaps an agent would notice
 
+GAP CATEGORIES — tag every gap with who can resolve it:
+- "human": needs a human decision/policy, or live status only a person knows
+  (e.g. team conventions, what is currently in progress, which approach to enforce)
+- "code": derivable by reading the actual source code (per-module responsibilities,
+  data flow, intent) — a later analysis stage handles these, not doc generation
+- "docs": fixable now by writing or restructuring documentation from information that
+  already exists in the repo
+
 SCORE BANDS — anchor every score to these definitions (do not score between bands arbitrarily):
 - 90-100: an agent can fully do its job from this alone — specific, complete, immediately actionable
 - 70-89:  mostly sufficient — minor gaps an agent could work around
@@ -108,9 +124,9 @@ OUTPUT LIMITS — keep the JSON small so it is never truncated:
 - Each message/gap under 20 words
 - No text outside the JSON object
 
-Return ONLY valid JSON:
+Return ONLY valid JSON (each gap is an object with text + category):
 {
-  "identity":     { "score": 0-100, "gaps": ["specific gap..."], "findings": [{"type":"pass"|"warn"|"fail","message":"..."}] },
+  "identity":     { "score": 0-100, "gaps": [{"text":"specific gap...","category":"human"|"code"|"docs"}], "findings": [{"type":"pass"|"warn"|"fail","message":"..."}] },
   "verification": { "score": 0-100, "gaps": [], "findings": [] },
   "state":        { "score": 0-100, "gaps": [], "findings": [] },
   "memory":       { "score": 0-100, "gaps": [], "findings": [] },
@@ -118,10 +134,31 @@ Return ONLY valid JSON:
 }`;
 }
 
+type RawGap = string | { text?: string; category?: string };
+
 interface LLMScoreEntry {
   score: number;
   findings?: Finding[];
-  gaps?: string[];
+  gaps?: RawGap[];
+}
+
+const GAP_CATEGORIES = new Set<GapCategory>(['human', 'code', 'docs']);
+
+function normalizeGaps(entry: LLMScoreEntry): { texts: string[]; triage: GapTriageItem[] } {
+  const texts: string[] = [];
+  const triage: GapTriageItem[] = [];
+  if (!Array.isArray(entry.gaps)) return { texts, triage };
+  for (const g of entry.gaps) {
+    if (typeof g === 'string') {
+      texts.push(g);
+      triage.push({ gap: g, category: 'docs' });
+    } else if (g && typeof g.text === 'string') {
+      const category = GAP_CATEGORIES.has(g.category as GapCategory) ? (g.category as GapCategory) : 'docs';
+      texts.push(g.text);
+      triage.push({ gap: g.text, category });
+    }
+  }
+  return { texts, triage };
 }
 
 interface LLMScoreResponse {
@@ -148,12 +185,8 @@ function normalizeFindings(entry: LLMScoreEntry): Finding[] {
       .filter((f) => (f.type === 'pass' || f.type === 'warn' || f.type === 'fail') && typeof f.message === 'string')
       .map((f) => ({ type: f.type, message: f.message }));
   }
-  if (Array.isArray(entry.gaps)) {
-    return entry.gaps
-      .filter((g) => typeof g === 'string')
-      .map((message) => ({ type: 'fail' as const, message }));
-  }
-  return [];
+  const { texts } = normalizeGaps(entry);
+  return texts.map((message) => ({ type: 'fail' as const, message }));
 }
 
 // Per-file content budget. Capping per file (not the joined blob) guarantees a
@@ -349,6 +382,7 @@ export async function scoreRepo(
       return {
         score: 0,
         gaps: [message],
+        gapTriage: [{ gap: message, category: 'docs' }],
         findings: [{ type: 'fail', message }],
         files: [],
       };
@@ -360,6 +394,7 @@ export async function scoreRepo(
       return {
         score: 0,
         gaps: [message],
+        gapTriage: [{ gap: message, category: 'docs' }],
         findings: key === 'verification'
           ? [{ type: 'fail', message }, ...baseline.findings]
           : [{ type: 'fail', message }],
@@ -373,9 +408,11 @@ export async function scoreRepo(
       ? [...normalizeFindings(entry), ...baseline.findings]
       : normalizeFindings(entry);
 
+    const { texts, triage } = normalizeGaps(entry);
     return {
       score: Math.min(100, Math.max(0, Math.round(entry.score))),
-      gaps: entry.gaps ?? [],
+      gaps: texts,
+      gapTriage: triage,
       findings,
       files: subsysFiles,
       baselineStatus: key === 'verification' ? baseline.status : undefined,

@@ -5,17 +5,19 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import {
   buildRemediationPlan,
   renderRemediationMarkdown,
+  renderGapTriage,
   writeRemediationPlan,
   CANONICAL_ARTIFACTS,
   SOURCE_ONLY_FILES,
 } from '../src/audit/remediation';
-import type { ScoredResult, SubsystemScore } from '../src/audit/scorer';
+import type { ScoredResult, SubsystemScore, GapTriageItem } from '../src/audit/scorer';
 
-function sub(score: number, files: string[] = [], gaps: string[] = []): SubsystemScore {
+function sub(score: number, files: string[] = [], gaps: string[] = [], gapTriage?: GapTriageItem[]): SubsystemScore {
   return {
     score,
     files,
     gaps,
+    gapTriage: gapTriage ?? gaps.map((gap) => ({ gap, category: 'docs' as const })),
     findings: gaps.map((message) => ({ type: 'fail' as const, message })),
   };
 }
@@ -32,6 +34,38 @@ function scored(overrides: Partial<ScoredResult> = {}): ScoredResult {
     ...overrides,
   };
 }
+
+describe('gap triage', () => {
+  it('groups gaps by category in the plan markdown', async () => {
+    const plan = await buildRemediationPlan(scored({
+      constraints: sub(40, ['CONSTRAINTS.md'], [], [
+        { gap: 'No frontend style policy', category: 'human' },
+      ]),
+      memory: sub(60, ['ARCHITECTURE.md'], [], [
+        { gap: 'utils/ files not mapped', category: 'code' },
+      ]),
+      identity: sub(70, ['AGENTS.md'], [], [
+        { gap: 'No pinned versions', category: 'docs' },
+      ]),
+    }), '/repo');
+
+    expect(plan.gapTriage).toContainEqual({ subsystem: 'constraints', gap: 'No frontend style policy', category: 'human' });
+
+    const md = renderGapTriage(plan).join('\n');
+    expect(md).toContain('## GAP TRIAGE');
+    expect(md).toContain('NEEDS HUMAN INPUT');
+    expect(md).toContain('[constraints] No frontend style policy');
+    expect(md).toContain('RESOLVE IN STAGE 3');
+    expect(md).toContain('[memory] utils/ files not mapped');
+    expect(md).toContain('STAGE 2 CAN ADDRESS');
+    expect(md).toContain('[identity] No pinned versions');
+  });
+
+  it('renders (none) when there are no gaps', async () => {
+    const plan = await buildRemediationPlan(scored(), '/repo');
+    expect(renderGapTriage(plan).join('\n')).toContain('(none)');
+  });
+});
 
 describe('buildRemediationPlan', () => {
   it('adds generate items when no files are mapped', async () => {

@@ -6,7 +6,7 @@ import { selectAuditConfig } from '../utils/prompt.js';
 import { createProvider } from '../utils/llm.js';
 import { buildInitPlan } from './planner.js';
 import { executeArtifact, type InitFlags } from './executor.js';
-import { getAuditScoreDetailed } from './scorer.js';
+import { getAuditScoreDetailed, type AuditScoreResult } from './scorer.js';
 import { consolidateEntryPoints } from './consolidator.js';
 import type { ArtifactPlan, InitPlan } from './planner.js';
 import { CANONICAL_ARTIFACTS } from '../audit/remediation.js';
@@ -130,9 +130,15 @@ function suggestNoiseCleaning(plan: InitPlan): void {
   console.log(sep);
 }
 
+const TRIAGE_LABELS: Array<{ category: 'human' | 'code' | 'docs'; heading: string }> = [
+  { category: 'human', heading: 'NEEDS HUMAN INPUT (decide / provide ground truth):' },
+  { category: 'code', heading: 'RESOLVE IN STAGE 3 — analyze (reads source code):' },
+  { category: 'docs', heading: 'STAGE 2 CAN ADDRESS (documentation):' },
+];
+
 function printRemainingGaps(
   afterSubs: Record<string, number>,
-  gaps: Record<string, string[]>,
+  triage: AuditScoreResult['gapTriage'],
 ): void {
   const subsystems = ['identity', 'verification', 'state', 'memory', 'constraints'];
   const below100 = subsystems.filter((s) => (afterSubs[s] ?? 0) < 100);
@@ -143,18 +149,22 @@ function printRemainingGaps(
   console.log("REMAINING GAPS — why the score isn't 100");
   console.log(sep);
   for (const sub of subsystems) {
-    const score = afterSubs[sub] ?? 0;
-    const topGap = gaps[sub]?.[0] ?? (score >= 100 ? '—' : 'minor polish');
-    console.log(`  ${sub.padEnd(13)} ${String(score).padStart(3)}   ${topGap}`);
+    console.log(`  ${sub.padEnd(13)} ${String(afterSubs[sub] ?? 0).padStart(3)}`);
   }
 
-  console.log('\nSome gaps cannot be filled by generation alone — they need ground');
-  console.log('truth that lives outside the documents:');
-  console.log('  • live session state (done / in progress / next task / blockers)');
-  console.log('    — keep PROGRESS.md and docs/SESSION-HANDOFF.md current as you work');
-  console.log('  • code-derived architecture (per-module responsibilities, data flow)');
-  console.log('    — Stage 3 `npx aiready analyze` reads the actual source code');
-  console.log('  • project-specific constraints and exact dependency versions');
+  if (triage.length > 0) {
+    console.log('');
+    for (const { category, heading } of TRIAGE_LABELS) {
+      const items = triage.filter((g) => g.category === category);
+      if (items.length === 0) continue;
+      console.log(`  ${heading}`);
+      for (const item of items) {
+        console.log(`    • [${item.subsystem}] ${item.gap}`);
+      }
+    }
+    console.log('\n  → human items are yours to fill; code items are for `npx aiready analyze` (Stage 3).');
+  }
+
   console.log(`\n${SCORING_DISCLOSURE}`);
   console.log(sep);
 }
@@ -261,7 +271,7 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
 
   printScoreDelta(scoreBefore, scoreAfter, beforeSubs, scoreAfterResult.subsystems, plan.artifacts);
 
-  printRemainingGaps(scoreAfterResult.subsystems, scoreAfterResult.gaps);
+  printRemainingGaps(scoreAfterResult.subsystems, scoreAfterResult.gapTriage);
 
   suggestNoiseCleaning(plan);
 

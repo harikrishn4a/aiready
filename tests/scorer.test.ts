@@ -140,6 +140,34 @@ describe('scoreRepo — intent-based scoring', () => {
     expect('isHarnessArtifact' in result.identity).toBe(false);
   });
 
+  it('parses per-gap categories into gapTriage', async () => {
+    const provider = makeProvider({
+      ...allZeroScores(),
+      identity: { score: 60, findings: [], gaps: [
+        { text: 'No pinned versions', category: 'docs' },
+        { text: 'Team naming policy undefined', category: 'human' },
+        { text: 'Module responsibilities unknown', category: 'code' },
+      ] },
+    });
+    const { files, mappings } = withFile('AGENTS.md', '# Agents\nContent.');
+    const result = await scoreRepo(makeFiles(files), mappings, provider);
+    expect(result.identity.gaps).toContain('No pinned versions');
+    const cats = Object.fromEntries(result.identity.gapTriage.map((t) => [t.gap, t.category]));
+    expect(cats['Team naming policy undefined']).toBe('human');
+    expect(cats['Module responsibilities unknown']).toBe('code');
+    expect(cats['No pinned versions']).toBe('docs');
+  });
+
+  it('defaults a plain-string gap to category docs (back-compat)', async () => {
+    const provider = makeProvider({
+      ...allZeroScores(),
+      identity: { score: 60, findings: [], gaps: ['legacy string gap'] },
+    });
+    const { files, mappings } = withFile('AGENTS.md', '# Agents\nContent.');
+    const result = await scoreRepo(makeFiles(files), mappings, provider);
+    expect(result.identity.gapTriage).toContainEqual({ gap: 'legacy string gap', category: 'docs' });
+  });
+
   it('overall is average of 5 subsystem scores', async () => {
     const provider = makeProvider({
       identity: { score: 80, gaps: [], findings: [] },

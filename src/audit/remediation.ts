@@ -1,6 +1,6 @@
 import { dirname, join } from 'path';
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
-import type { ScoredResult, SubsystemScore } from './scorer.js';
+import type { ScoredResult, SubsystemScore, GapCategory } from './scorer.js';
 import type { Subsystem } from './mapper.js';
 import { PLAN_DIR, artifactOutputPath, isPlanPath } from '../utils/layout.js';
 
@@ -52,6 +52,7 @@ export interface RemediationPlan {
   source_context: ManualReviewItem[];
   subsystemScores: Record<string, number>;
   subsystemSources: Record<string, string[]>;
+  gapTriage: Array<{ subsystem: string; gap: string; category: GapCategory }>;
 }
 
 export const SOURCE_ONLY_FILES = [
@@ -418,11 +419,15 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
   const sourceContextByPath = new Map<string, ManualReviewItem>();
   const subsystemScores: Record<string, number> = {};
   const subsystemSources: Record<string, string[]> = {};
+  const gapTriage: RemediationPlan['gapTriage'] = [];
 
   for (const subsystem of ['identity', 'verification', 'state', 'memory', 'constraints'] as const) {
     const data = scored[subsystem];
     subsystemScores[subsystem] = data.score;
     subsystemSources[subsystem] = prioritizeSources(data.files);
+    for (const t of data.gapTriage ?? []) {
+      gapTriage.push({ subsystem, gap: t.gap, category: t.category });
+    }
   }
 
   for (const def of CANONICAL_ARTIFACTS) {
@@ -440,7 +445,7 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
       }
     } else {
       const data: SubsystemScore = subsystemData ?? {
-        score: 0, gaps: [], findings: [], files: [],
+        score: 0, gaps: [], gapTriage: [], findings: [], files: [],
       };
       improve.push(makeImproveItem(target, def, data));
     }
@@ -482,7 +487,32 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
     source_context: [...sourceContextByPath.values()],
     subsystemScores,
     subsystemSources,
+    gapTriage,
   };
+}
+
+const GAP_TRIAGE_GROUPS: Array<{ category: GapCategory; heading: string }> = [
+  { category: 'human', heading: 'NEEDS HUMAN INPUT (decide / provide ground truth)' },
+  { category: 'code', heading: 'RESOLVE IN STAGE 3 — analyze (reads source code)' },
+  { category: 'docs', heading: 'STAGE 2 CAN ADDRESS (documentation gaps)' },
+];
+
+export function renderGapTriage(plan: RemediationPlan): string[] {
+  const lines: string[] = ['## GAP TRIAGE'];
+  if (plan.gapTriage.length === 0) {
+    lines.push('(none)');
+    return lines;
+  }
+  for (const { category, heading } of GAP_TRIAGE_GROUPS) {
+    const items = plan.gapTriage.filter((g) => g.category === category);
+    if (items.length === 0) continue;
+    lines.push(`### ${heading}`);
+    for (const item of items) {
+      lines.push(`- [${item.subsystem}] ${item.gap}`);
+    }
+    lines.push('');
+  }
+  return lines;
 }
 
 export function renderRemediationMarkdown(plan: RemediationPlan): string {
@@ -508,6 +538,9 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
     }
     lines.push('');
   }
+
+  lines.push(...renderGapTriage(plan));
+  lines.push('');
 
   lines.push('## GENERATE');
   if (plan.generate.length === 0) {
