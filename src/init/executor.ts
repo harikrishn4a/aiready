@@ -68,12 +68,15 @@ export async function executeArtifact(
   provider: LLMProvider,
   initContext?: InitContext,
 ): Promise<void> {
-  const filePath = join(target, artifact.filename);
+  const relPath = artifact.outputPath ?? artifact.filename;
+  const filePath = join(target, relPath);
+  const legacyRootPath = join(target, artifact.filename);
   const label = `[${step}/${total}]`;
   const fileExists = existsSync(filePath);
   const action = artifact.action === 'improve' ? 'Improving' : 'Generating';
 
-  console.log(`${label} ${action} ${artifact.filename}`);
+  const destLabel = relPath === artifact.filename ? artifact.filename : `${artifact.filename} → ${relPath}`;
+  console.log(`${label} ${action} ${destLabel}`);
   if (artifact.subsystem) console.log(`      Subsystem: ${artifact.subsystem}`);
   if (artifact.sourceFiles.length > 0) {
     console.log(`      Sources: ${artifact.sourceFiles.slice(0, 4).join(', ')}`);
@@ -99,7 +102,13 @@ export async function executeArtifact(
     return;
   }
 
-  const currentContent = fileExists ? readFileSync(filePath, 'utf-8') : null;
+  // Prefer the canonical output file; fall back to a legacy root copy as the
+  // basis for restructuring (its content is preserved, then written under docs/).
+  const currentContent = fileExists
+    ? readFileSync(filePath, 'utf-8')
+    : existsSync(legacyRootPath)
+      ? readFileSync(legacyRootPath, 'utf-8')
+      : null;
 
   const spinner = ora({ text: `${action}...`, indent: 6, spinner: { interval: 120, frames: SPINNER_FRAMES } }).start();
   try {

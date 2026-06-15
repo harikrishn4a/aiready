@@ -1,4 +1,4 @@
-import { resolve, join } from 'path';
+import { resolve } from 'path';
 import { existsSync } from 'fs';
 import { confirm } from '@inquirer/prompts';
 import { runAudit } from '../audit/index.js';
@@ -10,6 +10,7 @@ import { getAuditScoreDetailed } from './scorer.js';
 import { consolidateEntryPoints } from './consolidator.js';
 import type { ArtifactPlan, InitPlan } from './planner.js';
 import { CANONICAL_ARTIFACTS } from '../audit/remediation.js';
+import { planFilePath, PLAN_DIR } from '../utils/layout.js';
 
 export type { InitFlags };
 
@@ -27,18 +28,20 @@ function printPlanPreview(artifacts: ArtifactPlan[]): void {
   const padFile = (s: string) => s.padEnd(22);
   const padSub  = (s: string | null) => (s ?? '—').padEnd(14);
 
+  const dest = (a: ArtifactPlan) => (a.outputPath && a.outputPath !== a.filename ? `→ ${a.outputPath}` : '');
+
   if (generate.length > 0) {
     console.log(`\n  GENERATE (${generate.length}):`);
     for (const a of generate) {
       const sources = a.sourceFiles.length > 0 ? `sources: ${a.sourceFiles.slice(0, 3).join(', ')}` : '';
-      console.log(`    ${padFile(a.filename)} ${padSub(a.subsystem)} ${sources}`);
+      console.log(`    ${padFile(a.filename)} ${padSub(a.subsystem)} ${dest(a).padEnd(22)} ${sources}`);
     }
   }
 
   if (improve.length > 0) {
     console.log(`\n  IMPROVE (${improve.length}):`);
     for (const a of improve) {
-      console.log(`    ${padFile(a.filename)} ${padSub(a.subsystem)} ${a.reason}`);
+      console.log(`    ${padFile(a.filename)} ${padSub(a.subsystem)} ${dest(a).padEnd(22)} ${a.reason}`);
     }
   }
 
@@ -103,7 +106,8 @@ function suggestNoiseCleaning(plan: InitPlan): void {
     if (canonicalFilenames.has(f)) return false;   // keep canonical files
     if (AGENT_ENTRY_FILES.has(f)) return false;     // shimmed, not noise
     if (f === 'README.md') return false;            // never suggest removing README
-    if (f.startsWith('.aiready/')) return false;    // keep aiready internal files
+    if (f.startsWith('.aiready/')) return false;    // keep legacy aiready files
+    if (f.startsWith(`${PLAN_DIR}/`)) return false; // keep the plan folder
     if (f === 'package.json') return false;         // build manifest, not noise
     if (f.startsWith('scripts/')) return false;     // keep scripts
     if (f.startsWith('change_logs/')) return true;  // changelog files are candidates
@@ -127,13 +131,13 @@ function suggestNoiseCleaning(plan: InitPlan): void {
 
 export async function runInit(target: string, flags: InitFlags): Promise<void> {
   const targetDir = resolve(target);
-  const planPath = join(targetDir, '.aiready', 'plan.md');
+  const planPath = planFilePath(targetDir);
 
   if (!existsSync(planPath)) {
-    console.log('No .aiready/plan.md found. Running audit first...\n');
+    console.log('No plan/plan.md found. Running audit first...\n');
     await runAudit(target, { json: false, provider: flags.provider, model: flags.model });
     if (!existsSync(planPath)) {
-      console.error('Could not generate .aiready/plan.md. Run `npx aiready audit` first.');
+      console.error('Could not generate plan/plan.md. Run `npx aiready audit` first.');
       process.exit(1);
     }
   }
@@ -142,7 +146,7 @@ export async function runInit(target: string, flags: InitFlags): Promise<void> {
   try {
     plan = await buildInitPlan(planPath, targetDir);
   } catch (err) {
-    console.error(`Could not parse .aiready/plan.md: ${(err as Error).message}`);
+    console.error(`Could not parse plan/plan.md: ${(err as Error).message}`);
     console.error('Run `npx aiready audit` first.');
     process.exit(1);
     return;

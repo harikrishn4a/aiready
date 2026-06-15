@@ -1,6 +1,7 @@
 import { join } from 'path';
 import { readFile, listDirs, listFiles, statMtime, exists, walkMdFiles } from '../utils/fs.js';
 import { findGraphifyOutput, rankGraphifyFiles } from '../utils/graphify.js';
+import { DOCS_DIR } from '../utils/layout.js';
 
 const HARNESS_FILENAMES = [
   // Agent entry points
@@ -92,9 +93,19 @@ function makeRepoFile(target: string, filePath: string): RepoFile | null {
 }
 
 function loadGuaranteedFiles(target: string): RepoFile[] {
-  return HARNESS_FILENAMES
+  // Look for each harness file at the repo root and under docs/ (init writes
+  // non-entry artifacts there). Entry points (AGENTS.md etc.) stay at root.
+  const candidates = HARNESS_FILENAMES.flatMap((f) =>
+    f.endsWith('.md') ? [f, `${DOCS_DIR}/${f}`] : [f],
+  );
+  return candidates
     .map((filePath) => makeRepoFile(target, filePath))
     .filter((f): f is RepoFile => f !== null);
+}
+
+/** Read a harness file from the repo root, falling back to docs/. */
+function readHarness(target: string, name: string): string | null {
+  return readFile(join(target, name)) ?? readFile(join(target, DOCS_DIR, name));
 }
 
 function dedupeFiles(files: RepoFile[]): RepoFile[] {
@@ -124,14 +135,15 @@ export function loadRepo(targetDir: string): RepoFiles {
   }
 
   const agentsMd = loadAgentEntry(targetDir);
-  const architectureMd = read('ARCHITECTURE.md') ?? read('architecture.md');
-  const constraintsMd = read('CONSTRAINTS.md') ?? read('constraints.md');
-  const progressMd = read('PROGRESS.md') ?? read('progress.md');
-  const sessionHandoffMd = read('SESSION-HANDOFF.md') ?? read('session-handoff.md');
+  const architectureMd = readHarness(targetDir, 'ARCHITECTURE.md') ?? readHarness(targetDir, 'architecture.md');
+  const constraintsMd = readHarness(targetDir, 'CONSTRAINTS.md') ?? readHarness(targetDir, 'constraints.md');
+  const progressMd = readHarness(targetDir, 'PROGRESS.md') ?? readHarness(targetDir, 'progress.md');
+  const sessionHandoffMd = readHarness(targetDir, 'SESSION-HANDOFF.md') ?? readHarness(targetDir, 'session-handoff.md');
 
   const progressMdModifiedAt =
     statMtime(join(targetDir, 'PROGRESS.md')) ??
-    statMtime(join(targetDir, 'progress.md'));
+    statMtime(join(targetDir, 'progress.md')) ??
+    statMtime(join(targetDir, DOCS_DIR, 'PROGRESS.md'));
 
   const guaranteed = loadGuaranteedFiles(targetDir);
 

@@ -1,5 +1,6 @@
 import { readFile } from 'fs/promises';
 import { existsSync } from 'fs';
+import { isPlanPath } from '../utils/layout.js';
 
 export interface GenerateItem {
   subsystem: string;
@@ -79,7 +80,7 @@ const TEMPLATE_BY_FILENAME: Record<string, string> = {
 };
 
 function isPlanFile(filename: string): boolean {
-  return filename === 'plan.md' || filename.endsWith('.aiready/plan.md') || filename === '.aiready/plan.md';
+  return isPlanPath(filename);
 }
 
 function splitTokens(value: string): string[] {

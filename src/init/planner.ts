@@ -4,9 +4,11 @@ import { readFile } from 'fs/promises';
 import { parsePlanContent } from './parser.js';
 import { CANONICAL_ARTIFACTS, isEmpty } from '../audit/remediation.js';
 import type { CanonicalArtifactDef } from '../audit/remediation.js';
+import { artifactOutputPath } from '../utils/layout.js';
 
 export interface ArtifactPlan {
   filename: string;
+  outputPath: string;   // relative path where the artifact is written (docs/… or root)
   action: 'generate' | 'improve' | 'skip';
   subsystem: string | null;
   templateFile: string;
@@ -15,6 +17,22 @@ export interface ArtifactPlan {
   reason: string;
   alwaysGenerate: boolean;
   generateOnly: boolean;
+}
+
+/** True if the artifact exists at its docs/ output path or a legacy root path. */
+function artifactExists(target: string, filename: string): boolean {
+  return existsSync(join(target, artifactOutputPath(filename))) || existsSync(join(target, filename));
+}
+
+/** Read the artifact from its output path, falling back to a legacy root path. */
+function readArtifact(target: string, filename: string): string {
+  for (const rel of [artifactOutputPath(filename), filename]) {
+    const p = join(target, rel);
+    if (existsSync(p)) {
+      try { return readFileSync(p, 'utf-8'); } catch { /* ignore */ }
+    }
+  }
+  return '';
 }
 
 export interface InitPlan {
@@ -58,12 +76,13 @@ export async function buildInitPlan(planPath: string, target: string): Promise<I
   const artifacts: ArtifactPlan[] = [];
 
   for (const artifact of CANONICAL_ARTIFACTS) {
-    const filePath = join(target, artifact.filename);
-    const fileExists = existsSync(filePath);
+    const outputPath = artifactOutputPath(artifact.filename);
+    const fileExists = artifactExists(target, artifact.filename);
 
     if (!fileExists) {
       artifacts.push({
         filename: artifact.filename,
+        outputPath,
         action: 'generate',
         subsystem: artifact.subsystem,
         templateFile: artifact.template,
@@ -77,11 +96,11 @@ export async function buildInitPlan(planPath: string, target: string): Promise<I
     }
 
     if (artifact.generateOnly) {
-      let fileContent = '';
-      try { fileContent = readFileSync(filePath, 'utf-8'); } catch { /* ignore */ }
+      const fileContent = readArtifact(target, artifact.filename);
       if (isEmpty(fileContent)) {
         artifacts.push({
           filename: artifact.filename,
+          outputPath,
           action: 'generate',
           subsystem: artifact.subsystem,
           templateFile: artifact.template,
@@ -94,6 +113,7 @@ export async function buildInitPlan(planPath: string, target: string): Promise<I
       } else {
         artifacts.push({
           filename: artifact.filename,
+          outputPath,
           action: 'skip',
           subsystem: artifact.subsystem,
           templateFile: artifact.template,
@@ -110,6 +130,7 @@ export async function buildInitPlan(planPath: string, target: string): Promise<I
     // Non-generateOnly: always improve if exists
     artifacts.push({
       filename: artifact.filename,
+      outputPath,
       action: 'improve',
       subsystem: artifact.subsystem,
       templateFile: artifact.template,

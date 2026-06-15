@@ -113,6 +113,24 @@ describe('buildInitPlan', () => {
     }
   });
 
+  it('assigns docs/ output paths to non-entry markdown artifacts', async () => {
+    const plan = await buildInitPlan(PLAN_SCORES, PARTIAL_REPO);
+    const constraints = plan.artifacts.find((a) => a.filename === 'CONSTRAINTS.md');
+    expect(constraints?.outputPath).toBe('docs/CONSTRAINTS.md');
+    const agents = plan.artifacts.find((a) => a.filename === 'AGENTS.md');
+    expect(agents?.outputPath).toBe('AGENTS.md');
+    const makefile = plan.artifacts.find((a) => a.filename === 'Makefile');
+    expect(makefile?.outputPath).toBe('Makefile');
+  });
+
+  it('improves a legacy root artifact but targets docs/', async () => {
+    // partial-repo has PROGRESS.md at the root → improve, output under docs/
+    const plan = await buildInitPlan(PLAN_SCORES, PARTIAL_REPO);
+    const progress = plan.artifacts.find((a) => a.filename === 'PROGRESS.md');
+    expect(progress?.action).toBe('improve');
+    expect(progress?.outputPath).toBe('docs/PROGRESS.md');
+  });
+
   it('scripts/init.sh is generateOnly with null subsystem', async () => {
     const plan = await buildInitPlan(PLAN_SCORES, PARTIAL_REPO);
     const initSh = plan.artifacts.find((a) => a.filename === 'scripts/init.sh');

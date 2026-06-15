@@ -346,12 +346,12 @@ describe('renderRemediationMarkdown', () => {
 });
 
 describe('writeRemediationPlan', () => {
-  it('writes .aiready/plan.md under target', async () => {
+  it('writes plan/plan.md under target', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'aiready-plan-'));
     try {
       const plan = await buildRemediationPlan(scored(), dir);
       const planPath = writeRemediationPlan(dir, plan);
-      expect(planPath.endsWith(join('.aiready', 'plan.md'))).toBe(true);
+      expect(planPath.endsWith(join('plan', 'plan.md'))).toBe(true);
       expect(readFileSync(planPath, 'utf8')).toContain('# AIReady Plan');
     } finally {
       rmSync(dir, { recursive: true, force: true });

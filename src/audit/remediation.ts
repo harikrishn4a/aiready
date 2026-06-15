@@ -2,6 +2,7 @@ import { dirname, join } from 'path';
 import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'fs';
 import type { ScoredResult, SubsystemScore } from './scorer.js';
 import type { Subsystem } from './mapper.js';
+import { PLAN_DIR, artifactOutputPath, isPlanPath } from '../utils/layout.js';
 
 export interface RemediationItem {
   filename: string;
@@ -70,7 +71,23 @@ export function isEmpty(content: string): boolean {
 const MAX_LINES = 300;
 
 function isPlanFile(file: string): boolean {
-  return file === 'plan.md' || file === '.aiready/plan.md' || file.endsWith('/.aiready/plan.md');
+  return isPlanPath(file);
+}
+
+/** True when the artifact exists at its canonical output path or a legacy root path. */
+function artifactExists(target: string, filename: string): boolean {
+  return existsSync(join(target, artifactOutputPath(filename))) || existsSync(join(target, filename));
+}
+
+/** Read an artifact's content from its output path, falling back to a legacy root path. */
+function readArtifact(target: string, filename: string): string {
+  for (const rel of [artifactOutputPath(filename), filename]) {
+    const p = join(target, rel);
+    if (existsSync(p)) {
+      try { return readFileSync(p, 'utf8'); } catch { /* ignore */ }
+    }
+  }
+  return '';
 }
 
 function hasUsefulContent(target: string, file: string): boolean {
@@ -389,15 +406,13 @@ export async function buildRemediationPlan(scored: ScoredResult, target: string)
   }
 
   for (const def of CANONICAL_ARTIFACTS) {
-    const filePath = join(target, def.filename);
-    const fileExists = existsSync(filePath);
+    const fileExists = artifactExists(target, def.filename);
     const subsystemData = def.subsystem ? scored[def.subsystem] : null;
 
     if (!fileExists) {
       generate.push(makeGenerateItem(target, def, subsystemData));
     } else if (def.generateOnly) {
-      let content = '';
-      try { content = readFileSync(filePath, 'utf8'); } catch { /* ignore */ }
+      const content = readArtifact(target, def.filename);
       if (isEmpty(content)) {
         generate.push(makeGenerateItem(target, def, subsystemData));
       } else {
@@ -481,6 +496,7 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
     for (const item of plan.generate) {
       lines.push(`### ${item.filename}`);
       lines.push(`- subsystem: ${item.subsystem ?? 'n/a'}`);
+      lines.push(`- output: ${artifactOutputPath(item.filename)}`);
       lines.push(`- template: ${item.template}`);
       if (item.generateOnly) {
         lines.push('- source_files: (template copy — no source context needed)');
@@ -501,6 +517,7 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
     for (const item of plan.improve) {
       lines.push(`### ${item.filename}`);
       lines.push(`- subsystem: ${item.subsystem ?? 'n/a'}`);
+      lines.push(`- output: ${artifactOutputPath(item.filename)}`);
       lines.push(`- section: ${item.section}`);
       lines.push(`- missing: ${item.missing}`);
       lines.push(`- fix: ${item.fix}`);
@@ -539,7 +556,7 @@ export function renderRemediationMarkdown(plan: RemediationPlan): string {
 }
 
 export function writeRemediationPlan(target: string, plan: RemediationPlan): string {
-  const planPath = join(target, '.aiready', 'plan.md');
+  const planPath = join(target, PLAN_DIR, 'plan.md');
   mkdirSync(dirname(planPath), { recursive: true });
   writeFileSync(planPath, renderRemediationMarkdown(plan), 'utf8');
   return planPath;

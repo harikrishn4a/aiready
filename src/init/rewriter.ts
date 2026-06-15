@@ -4,6 +4,16 @@ import type { LLMProvider } from '../utils/llm.js';
 import { loadTemplate, assertTemplateLoaded } from './generator.js';
 import { cleanLLMOutput } from './output.js';
 import { findDriftedHeadings, replaceHeadings } from './corrector.js';
+import { artifactOutputPath, isDocsArtifact } from '../utils/layout.js';
+
+// Tells the LLM where harness artifacts live so cross-references resolve.
+const LAYOUT_NOTE = `REPOSITORY LAYOUT — reference other artifacts by their real path:
+- AGENTS.md stays at the repo root (it is the agent entry point).
+- Makefile, scripts/, and feature_list.json stay at the repo root.
+- ALL other harness markdown files live under docs/ — e.g. docs/PROGRESS.md,
+  docs/ARCHITECTURE.md, docs/CONSTRAINTS.md, docs/DECISIONS.md,
+  docs/SESSION-HANDOFF.md, docs/structure.md.
+When you mention another harness file, use its docs/ path so an agent can find it.`;
 
 const MAX_LINES = 300;
 
@@ -148,6 +158,11 @@ function buildRewritePrompt(
     for (const src of sourceContents) {
       parts.push(src.slice(0, 2000));
     }
+  }
+
+  parts.push(`\n${LAYOUT_NOTE}`);
+  if (isDocsArtifact(filename)) {
+    parts.push(`This file (${filename}) is written to ${artifactOutputPath(filename)}.`);
   }
 
   parts.push(
