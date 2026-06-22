@@ -1,14 +1,14 @@
 # PROGRESS.md — AIReady
 
 ## Current state
-- Build: passing — dist/cli.js ~120 KB (full pipeline + Stage 2 bundled)
-- Tests: 368/368 passing (27 test files)
+- Build: passing — dist/cli.js ~152 KB (audit + init + analyze bundled)
+- Tests: 449/449 passing (32 test files)
 - Typecheck: clean
 - Lint: clean
-- Last verified: 2026-06-15
-- Active feature: none — **feat-021, feat-022, feat-023 complete**
-- Live smoke: audit + init verified on ./betterworld via Anthropic Sonnet
-  (standalone post-init audit 81/100; audit-twice variance ~3pt with temperature:0)
+- Last verified: 2026-06-22
+- Active feature: none — **feat-024 (analyze) complete**
+- Live smoke: analyze verified on ./betterworld via Anthropic Haiku
+  (163 files walked, 163 LLM-analyzed, Graphify used, 163 semantic gaps, ~540k tokens)
 
 ## Completed
 - [x] Product design and stage definitions
@@ -28,7 +28,7 @@
 - [x] **feat-011** — Graphify semantic query, strict scoring criteria, `.aiready/plan.md` remediation contract, and sea-green TTY spinner
 
 ## In progress
-- nothing — feat-022 complete
+- nothing — feat-024 complete
 
 ## Blocked
 - nothing
@@ -134,7 +134,18 @@
 - [x] **feat-019** — Expanded canonical artifact set: 19 artifacts (was 13), `generateOnly` flag for Makefile/scripts/TASK/features/QUALITY/quality-document/evaluator_rubric/clean-state-checklist/startup; removed score-gated SKIP for non-generateOnly artifacts; buildInitPlan() re-derives all decisions from CANONICAL_ARTIFACTS + filesystem; renderRemediationMarkdown shows template-copy notation for generateOnly items
 - [x] **feat-020** — Heading enforcement: strict SYSTEM_PROMPT rules; corrector.ts (Dice bigram similarity + regex replace + optional LLM for missing sections); ora@5 spinner in executor.ts showing Generating.../Correcting headings... per artifact
 
-## Backlog — Stage 3+
-- Stage 3: analyze command (semantic gap analysis)
-- Stage 4: drift command (stale docs detection)
-- Stage 5: fix command (auto-remediation)
+## Session 13 (2026-06-22)
+- [x] **feat-024** — Stage 3 `npx aiready analyze`. Two-level gap detection:
+  Level 1 structural (string-match all source modules vs harness text, no LLM,
+  complete coverage); Level 2 semantic (one LLM call per stack-relevant file,
+  proposed language-correct doc block per gap). New modules: analyze/loader.ts,
+  analyzer.ts, reporter.ts, writer.ts. New utils: detectSourceExtensions (detect.ts),
+  gapsFilePath (layout.ts). Graphify used for centrality-based file ranking in Level 2.
+  rankSourceFilesWithGraph written separately (graphify.ts rankGraphifyFiles is
+  .md-only and must not be modified). Prompt enforces format per extension (Python
+  triple-quote, JS/TS JSDoc) with explicit file ext header in user message.
+  449 tests (81 new). Smoke: betterworld 163 gaps, gaps.md written.
+
+## Backlog — Stage 4+
+- Stage 4: drift command (stale docs detection via git history)
+- Stage 5: fix command (auto-remediation using plan/gaps/drift)

@@ -1,120 +1,66 @@
 # SESSION-HANDOFF.md
 
 ## Date
-2026-06-15
+2026-06-22
 
 ## What was completed
-- **feat-021** — Intent-based audit scoring + unified canonical rewriter
-- **feat-022** — `plan/` and `docs/` layout with root-level entry points
-- **feat-023** — Stack-aware artifacts, stable scoring, remaining-gaps UX, scorer per-file fix
-- Baseline repair: excluded the time-dependent `progress-md-is-fresh` check from the
-  good-repo cross-ref assertion (committed-fixture mtime rots past the 7-day threshold)
+- **feat-024** — Stage 3 `npx aiready analyze` (complete)
 
-### feat-023 highlights
-- `utils/detect.ts` `detectStack()` → `rewriter` STACK_AWARE_FILES (Makefile,
-  scripts/init.sh, scripts/verify.sh, startup.md) rewritten with detected-stack
-  context instead of npm template copies; `fixMakefileTabs` repairs recipe indentation.
-- `llm.ts` `ChatOptions { temperature, seed }`; mapper + scorer use `{temperature:0,
-  seed:7}`; scorer prompt anchored to SCORE BANDS → audit-twice variance 14pt → ~3pt.
-- `scorer.buildSubsystemContent` caps content **per file** (6000) and orders entry
-  files last → docs/ artifacts no longer crowded out by AGENTS.md
-  (betterworld standalone audit 49 → 81).
-- CLI: numbered critical gaps, `REMAINING GAPS` section after init re-score,
-  `SCORING_DISCLOSURE` in audit + init.
+### feat-024 highlights
 
-### feat-021 — intent-based scoring + rewriter
-- `src/audit/scorer.ts` — rewritten: `SUBSYSTEM_INTENTS` + a single intent-based LLM
-  call ("can an AI coding agent do its job using only what is documented here?").
-  Removed all structural scoring (`detectFileType`, `scoreMakefile/Shell/Json/
-  Architecture/MarkdownStructure`, `scoreStructural`, `combineScores`,
-  `scoreFromBaseline`, the 40/60 weighting). `SubsystemScore` simplified to
-  `{ score, gaps, findings, files, baselineStatus? }`. `checkVerificationBaseline`
-  kept as a finding source only (not a score input).
-- `src/audit/reporter.ts` — prints per-finding glyph lines (✓/⚠/✗); removed the
-  structural "Sections N/M" output; subsystem names uppercased.
-- `src/init/rewriter.ts` (new) — `rewriteToCanonical()` handles GENERATE and IMPROVE
-  via per-file prompt dispatch (`FILE_GUIDANCE` from INIT-COMMAND-PROMPTS.md), with
-  folded deterministic heading correction, a 300-line cap, and `sanitisePlaceholders()`.
-  Subsumes `improver.ts` (deleted).
-- `src/init/executor.ts` — `executeArtifact()` replaces `executeGenerate`/
-  `executeImprove`; keeps the ora@5 spinner and the generateOnly/blank-template
-  direct-copy path.
-- `src/init/index.ts` — calls `executeArtifact`; `suggestNoiseCleaning()` after re-score.
-- `src/init/generator.ts` — trimmed to `loadTemplate` / `assertTemplateLoaded` /
-  `BLANK_TEMPLATE_FILES` / `InitContext`.
+**New modules:**
+- `src/analyze/loader.ts` — `walkSourceFiles` (extension + skip-list, depth ≤ 6,
+  no `src/` assumption), `rankSourceFilesWithGraph` (graph centrality for source
+  files, separate from audit's `.md`-only `rankGraphifyFiles`), `loadSourceFiles`
+  returning `{ all, relevant, usedGraphify, detectedExtensions }`.
+- `src/analyze/analyzer.ts` — `runStructuralPass` (Level 1: string-match every
+  module name vs harness text, no LLM), `runSemanticPass` (Level 2: one LLM call
+  per relevant file, returns gap type + summary + proposed doc block), `analyzeGaps`
+  (merge: semantic wins over structural for same module).
+- `src/analyze/reporter.ts` — `reportAnalysis`: two-section CLI output (STRUCTURAL
+  GAPS ✗ / SEMANTIC GAPS ⚠), severity labels, token count, output path.
+- `src/analyze/writer.ts` — `renderGapsMd` + `writeGaps`: `.aiready/gaps.md` grouped
+  high→medium→low with language-correct code fences per proposed doc.
+- `src/analyze/index.ts` — `runAnalyze` entry point (replaced `export {}` stub).
 
-### feat-022 — plan/ + docs/ layout
-- `src/utils/layout.ts` (new) — `PLAN_DIR`, `DOCS_DIR`, `planFilePath`,
-  `artifactOutputPath` (only non-entry markdown → `docs/`), `isDocsArtifact`, `isPlanPath`.
-- Audit writes the plan to `plan/plan.md` (was `.aiready/plan.md`); plan markdown
-  shows an `output:` line per item.
-- `src/audit/loader.ts` — finds canonical artifacts at the root **or** under `docs/`.
-- `src/init/planner.ts` — `ArtifactPlan.outputPath`; a legacy root artifact counts as
-  existing → restructured into `docs/`.
-- `src/init/executor.ts` — writes to `outputPath`, reads current content from output
-  or legacy root; an IMPROVE is no longer skipped when only the legacy root copy exists.
-- `src/init/rewriter.ts` — `linkDocsReferences()` deterministically rewrites bare
-  references to docs/-bound artifacts into their `docs/` path (skips self, root files,
-  already-prefixed paths). Prompt-only docs awareness was unreliable on small models.
+**New utilities:**
+- `src/utils/detect.ts` — `detectSourceExtensions(targetDir): Set<string>` and
+  `SOURCE_EXTENSIONS` constant (does not change `detectStack()` signature).
+- `src/utils/layout.ts` — `gapsFilePath(target): string`.
+
+**CLI:** `analyze` command registered in `src/cli.ts` with `--target/--provider/--model`.
+
+**Prompt quality fix:** LLM system prompt explicitly forbids wrong formats per extension
+(e.g. "Do NOT use `/** */` in Python files"). User message header includes
+`REQUIRED DOC FORMAT: Python triple-quote docstring """ ... """` adjacent to the code.
+
+**vite override:** Added `"vite": "^6.0.0"` to `package.json` overrides — vite 7
+dropped Node 18 support, breaking `vitest run` with `ERR_REQUIRE_ESM`.
 
 ## Verification run
 | Command | Result |
 |---|---|
-| `npm run build` | pass — dist/cli.js ~104 KB |
+| `npm run build` | pass — dist/cli.js ~152 KB |
 | `npm run typecheck` | pass |
 | `npm run lint` | pass |
-| `npm test` | pass — 357/357 (26 test files) |
-
-## feat-023 follow-up fixes (from betterworld REMAINING GAPS analysis)
-- Scorer reads non-markdown harness artifacts (Makefile, scripts/*, feature_list.json)
-  and prepends them — verification no longer blind to a generated Makefile (was
-  dropping 72→52, now ~85). See `NON_MD_HARNESS` in scorer.ts.
-- Generation `maxTokens` 2048→4096 (rewriter) — AGENTS.md/CONSTRAINTS.md no longer
-  truncated mid-section.
-- Scoring `maxTokens` 4096 + output-verbosity caps + retry-on-unparseable — fixes the
-  all-zero "LLM did not score this subsystem" failure (JSON truncation).
-- Stack-aware files: prompt names the repo + `stripRepoPrefix()` removes `cd <repo> &&`
-  and `<repo>/`. Makefile recipes verified clean on betterworld.
-- KNOWN: init does NOT run a quality/correction loop — only deterministic fixups
-  (heading rename, Makefile tabs, placeholder sanitise, docs-links, repo-prefix strip).
-  A truncation/missing-section re-generation loop is a candidate next feature.
-- KNOWN minor: non-stack-aware docs (CONSTRAINTS.md/structure.md) may still echo a
-  `betterworld/` path prefix from source docs; only stack-aware files are prefix-stripped.
-
-## Live smoke (./betterworld, Anthropic Sonnet — claude-sonnet-4-6)
-- `audit` twice on the unchanged repo → 46 then 43 (~3pt variance, was ~14pt on
-  gpt-4o-mini before temperature:0).
-- `init --yes` → 17 artifacts; `docs/*.md` written; `Makefile` is stack-aware
-  (pure Python: pytest/ruff/mypy/uvicorn, 0 npm refs, tab-indented); `REMAINING GAPS`
-  + disclosure printed; noise-cleanup suggested the change_log.
-- Standalone post-init `audit` → **81/100** (identity 90 · verification 62 · state 78 ·
-  memory 82 · constraints 92) after the per-file scorer fix.
-  (OpenAI gpt-4o-mini earlier showed 30 → 84 internal / 70 standalone.)
-
-## Why scores plateau below 100 (and what an LLM call cannot fix)
-- Fixable by generation (now done): stack-correct Makefile/scripts/startup.md.
-- NOT fillable by generation — needs ground truth outside the docs:
-  live session state (PROGRESS/SESSION-HANDOFF), code-derived module map + data flow
-  (Stage 3 `analyze` reads code), project-specific constraints, exact dep versions.
-  The CLI now surfaces this explicitly via the `REMAINING GAPS` section.
+| `npm test` | pass — 449/449 (32 test files, 81 new) |
+| `analyze --target ./betterworld` | pass — 163 gaps, gaps.md written, ~540k tokens |
 
 ## What is broken or unverified
-- The standalone post-init audit (70) scores lower than init's internal re-score (84):
-  expected — gpt-4o-mini scoring is non-deterministic and the mapper re-maps files each
-  run. Not a regression; both confirm large gains from baseline.
-- `npm publish` NOT run — outward-facing; left for explicit human approval.
-- Init leaves the legacy root copy of an improved artifact in place (e.g. root
-  ARCHITECTURE.md) alongside the new docs/ copy; surfaced via noise-cleanup suggestions
-  rather than auto-deleted (CONSTRAINTS: never delete user files).
+- `npm install` on Node 18 requires `npm_config_engine_strict=false` due to `engines: >=20`
+- Proposed doc blocks occasionally have imperfect content (LLM quality), but format is now enforced correctly (Python → docstring, TS/JS → JSDoc) — verified on betterworld
+- betterworld has 163 relevant source files so ALL are LLM-analyzed (~540k tokens with Haiku). Repos with many files may be expensive; no cap currently enforced on Level 2
 
 ## Next best step
-- Decide whether to auto-suggest removing legacy root duplicates of artifacts now living
-  under docs/ (currently only non-canonical sources are suggested).
-- Stage 3 (`analyze`) — next session. Do not start until this is reviewed.
+- Stage 4 (`analyze drift`) — compare harness docs against git history to find stale docs
+- Consider adding `--max-files N` flag to analyze to cap Level 2 LLM calls on large repos
+- Update `docs/structure.md` to document `.aiready/gaps.md` as a Stage 3 output artifact
 
 ## Must not change
-- `src/utils/llm.ts` is the ONLY file that may import LLM SDKs.
-- `ora` must stay at ^5 until tsup outputs ESM.
-- `betterworld/` is a local external test target — git-ignored, never commit it.
+- `src/utils/llm.ts` is the ONLY file that may import LLM SDKs
+- `rankGraphifyFiles` in `utils/graphify.ts` must NOT be modified (audit uses it, .md-only)
+- `detectStack()` signature must remain `(targetDir: string): string` (init/rewriter.ts)
+- `ora` must stay at ^5 until tsup outputs ESM
+- `betterworld/` is a local external test target — git-ignored, never commit it
 - Layout invariant: AGENTS.md + entry points + Makefile/scripts/*.json stay at root;
-  every other canonical markdown artifact lives under docs/.
+  every other canonical markdown artifact lives under docs/

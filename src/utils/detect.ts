@@ -1,5 +1,43 @@
-import { exists, readFile } from './fs.js';
+import { exists, readFile, listDirs } from './fs.js';
 import { join } from 'path';
+
+export const SOURCE_EXTENSIONS = [
+  '.ts', '.tsx', '.js', '.jsx',
+  '.py', '.go', '.rs', '.java',
+  '.rb', '.cs', '.cpp', '.c',
+  '.swift', '.kt', '.php',
+] as const;
+
+const STACK_EXTENSION_MAP: Array<{ marker: string; exts: string[] }> = [
+  { marker: 'package.json',     exts: ['.ts', '.tsx', '.js', '.jsx'] },
+  { marker: 'requirements.txt', exts: ['.py'] },
+  { marker: 'pyproject.toml',   exts: ['.py'] },
+  { marker: 'setup.py',         exts: ['.py'] },
+  { marker: 'go.mod',           exts: ['.go'] },
+  { marker: 'Cargo.toml',       exts: ['.rs'] },
+  { marker: 'pom.xml',          exts: ['.java'] },
+  { marker: 'build.gradle',     exts: ['.java', '.kt'] },
+  { marker: 'Gemfile',          exts: ['.rb'] },
+];
+
+/**
+ * Returns the set of source file extensions relevant to this repo's stack.
+ * Checks root-level markers and one level of subdirectories (e.g. frontend/).
+ * Falls back to all SOURCE_EXTENSIONS if no markers are found.
+ */
+export function detectSourceExtensions(targetDir: string): Set<string> {
+  const exts = new Set<string>();
+  const addForMarker = (dir: string): void => {
+    for (const { marker, exts: e } of STACK_EXTENSION_MAP) {
+      if (exists(join(dir, marker))) e.forEach((x) => exts.add(x));
+    }
+  };
+  addForMarker(targetDir);
+  for (const subdir of listDirs(targetDir)) {
+    addForMarker(join(targetDir, subdir));
+  }
+  return exts.size > 0 ? exts : new Set<string>(SOURCE_EXTENSIONS);
+}
 
 export type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'unknown';
 

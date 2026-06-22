@@ -18,4 +18,18 @@ describe('CLI smoke test', () => {
     const audit = program.commands.find((c) => c.name() === 'audit');
     expect(audit?.opts()).not.toHaveProperty('minScore');
   });
+
+  it('has analyze command registered', () => {
+    const commands = program.commands.map((c) => c.name());
+    expect(commands).toContain('analyze');
+  });
+
+  it('analyze command has --provider, --model, --target flags', () => {
+    const analyze = program.commands.find((c) => c.name() === 'analyze');
+    expect(analyze).toBeDefined();
+    const opts = analyze!.options.map((o) => o.long);
+    expect(opts).toContain('--provider');
+    expect(opts).toContain('--model');
+    expect(opts).toContain('--target');
+  });
 });

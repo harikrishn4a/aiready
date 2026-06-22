@@ -264,6 +264,36 @@ Append new decisions at the bottom — never edit existing ones.
 
 ---
 
+### 2026-06-22: Stage 3 analyze uses two-level gap detection (structural + semantic)
+
+- **Decision**: `analyze` runs two passes: (1) structural — string-match every source module name against harness text, no LLM, complete coverage; (2) semantic — one LLM call per stack-relevant file (filtered by `detectSourceExtensions`), generating a compact proposed doc block per gap. Semantic findings replace structural findings for the same module.
+- **Reason**: Pure LLM analysis would be expensive and miss files outside the stack-detected extension set. Pure string-matching misses modules that are named in docs but inadequately described. Two levels gives full structural coverage cheaply and semantic depth where it matters.
+- **Rejected alternatives**: Single batched LLM call with all files — exceeds context limits on large repos. LLM triage phase to select files — `detectSourceExtensions` achieves the same filtering deterministically for free.
+- **Constraints introduced**: `rankGraphifyFiles` in `utils/graphify.ts` must NOT be modified — it is `.md`-only and used by audit. `rankSourceFilesWithGraph` in `analyze/loader.ts` is a separate function that handles source file centrality scoring.
+- **Revisit when**: Stage 4 (drift) needs similar source-walking logic — consider extracting shared source file discovery into `utils/`.
+
+---
+
+### 2026-06-22: Analyze generates proposed doc blocks in language-correct format
+
+- **Decision**: The Level 2 LLM prompt enforces exact format per file extension: `.py` → Python triple-quote module docstring; `.ts/.tsx/.js/.jsx` → JSDoc `/** @file ... */`. The file extension and required format are included explicitly in the user message header (not just the system prompt) so format rules are adjacent to the code being analyzed.
+- **Reason**: Without explicit per-extension rules, the LLM inconsistently generated JSDoc for Python files. Two-layer enforcement (system prompt rules + user message header) proved reliable in testing.
+- **Rejected alternatives**: System prompt only — inconsistent on models smaller than Sonnet. Post-processing to detect and fix format — fragile, better to get it right from the model.
+- **Constraints introduced**: The system prompt must list the anti-patterns explicitly (e.g. "Do NOT use `/** */` in Python files"). Any new language extension added to SOURCE_EXTENSIONS must also have a format rule in the system prompt.
+- **Revisit when**: A language needs a format other than docstring/JSDoc (e.g. Go godoc, Rust `///`).
+
+---
+
+### 2026-06-22: Vite pinned to ^6 via package.json overrides (Node 18 / vite 7 incompatibility)
+
+- **Decision**: Added `"vite": "^6.0.0"` to `package.json` `overrides`. Vite 7 dropped Node 18 support; the project's `engines` field says `>=20` but the development machine runs Node 18.
+- **Reason**: Vite 7.x is pure ESM and its CJS compatibility shim was removed, causing `vitest run` to fail with `ERR_REQUIRE_ESM` when loading `vitest.config.ts` via the CJS path. Pinning to v6 restores the working state.
+- **Rejected alternatives**: Upgrade Node to 20+ — correct long-term but outside this session's scope. Switch `vitest.config.ts` to `.mts` — works but masks the real Node version mismatch.
+- **Constraints introduced**: Must run `npm_config_engine_strict=false npm install` on Node 18 due to the `engines: >=20` constraint. Remove the override once the dev machine is on Node 20+.
+- **Revisit when**: Development machine is upgraded to Node 20+.
+
+---
+
 ### 2026-06-15: OpenTelemetry CLI usage telemetry + offline npm download metrics
 
 - **Decision**: Wrap the published bin with `cli-opentelemetry` (`dist/telemetry-bin.js` → spawns `dist/cli.js`). Add a maintainer-only `scripts/download-metrics.mjs` using `npm-stats-api` (devDependency) and `npm run metrics:downloads`.

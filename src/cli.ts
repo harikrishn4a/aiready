@@ -3,6 +3,7 @@ import { Command } from 'commander';
 import { runAudit } from './audit/index.js';
 import { runInit } from './init/index.js';
 import { runGraph } from './graph/index.js';
+import { runAnalyze } from './analyze/index.js';
 import { checkForUpdate } from './utils/update-check.js';
 import pkg from '../package.json';
 
@@ -62,6 +63,22 @@ program
       force: opts.force,
       dryRun: opts.dryRun,
       yes: opts.yes,
+    }).catch((err: unknown) => {
+      process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
+      process.exit(1);
+    });
+  });
+
+program
+  .command('analyze')
+  .description('Find undocumented source code intent, writes .aiready/gaps.md')
+  .option('-t, --target <dir>', 'target directory', '.')
+  .option('--provider <name>', 'LLM provider: anthropic | openai | ollama (skips prompt)')
+  .option('--model <id>', 'model ID (e.g. claude-sonnet-4-6) — skips prompt')
+  .action((opts: { target: string; provider?: string; model?: string }) => {
+    runAnalyze(opts.target, {
+      provider: opts.provider,
+      model: opts.model,
     }).catch((err: unknown) => {
       process.stderr.write(`ERROR: ${err instanceof Error ? err.message : String(err)}\n`);
       process.exit(1);
