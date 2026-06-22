@@ -50,12 +50,12 @@ aiready audit
 Step 5: Initialise artifacts
 - aiready generates custom artifacts to strengthen your harness based on docs available in your repo
 - if existing entry point files (AGENTS.md / CLAUDE.md / cursor / windurf) are present, init reorganises content from these files to AGENTS.md, and points other entry files to AGENTS.md
-- init is meant to create template artifacts based on the content and context available in your repo, doesn't do a deep dive into the code base to generate module level docs, that is deferred to analyze stage under development.
+- init is meant to create template artifacts based on the content and context available in your repo, doesn't do a deep dive into the code base to generate module level docs, that is deferred to analyze stage, which is currently under development.
 
 ```bash 
 aiready init        
 ```
-- As score of 70 - 80 is considered ideal for this stage, for it to be considered a well crafted harness as init merely reorganises context found in artifacts from identified source files. The actual code exploration is deffered to analyse stage which is currently underdevelopment, to ensure that the harness can be strengthened with semantic understanding of code.  
+- A score of 70 - 80 is considered ideal for this stage, for it to be considered a well crafted harness as init merely reorganises and improves on existing context found in artifacts from identified source files. The actual code exploration is deffered to analyse stage which is currently underdevelopment, to ensure that the harness can be strengthened with semantic understanding of code.  
 - LLM calls are not deterministic, but are stabilised to provide reliable scoring. A +- 5 between calls is expected, and normal.
 
 
@@ -63,7 +63,9 @@ aiready init
 
 <sub>**In development** — not yet available:</sub>
 > <sub>`aiready analyze` · reads your code + graph to document undocumented intent</sub>
+
 > <sub>`aiready drift` · finds harness docs that have gone stale vs git history</sub>
+
 > <sub>`aiready fix` · patches exactly what's wrong, with a diff before writing</sub>
 
 ## Updating
