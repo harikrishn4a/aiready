@@ -1,6 +1,6 @@
 {
   "project": "aiready",
-  "last_updated": "2026-06-15",
+  "last_updated": "2026-06-22",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -42,7 +42,7 @@
       "id": "feat-001",
       "priority": 1,
       "area": "audit",
-      "title": "Audit loader — read target repo files into memory",
+      "title": "Audit loader \u2014 read target repo files into memory",
       "user_visible_behavior": "src/audit/loader.ts reads a target directory and returns a structured file map",
       "status": "passing",
       "blocked_reason": "",
@@ -57,7 +57,7 @@
         "npm test: 15 passed (cli.test.ts 2, loader.test.ts 13)",
         "npm run typecheck: zero errors",
         "npm run lint: clean",
-        "Note: macOS case-insensitive FS — 'prefers uppercase' test removed as n/a on this platform"
+        "Note: macOS case-insensitive FS \u2014 'prefers uppercase' test removed as n/a on this platform"
       ],
       "agent_notes": "src/utils/fs.ts and src/utils/detect.ts also created in this feature. detect.ts is a stub.",
       "last_updated": "2026-06-04"
@@ -66,7 +66,7 @@
       "id": "feat-002",
       "priority": 2,
       "area": "audit",
-      "title": "Audit scorer — score 5 subsystems",
+      "title": "Audit scorer \u2014 score 5 subsystems",
       "user_visible_behavior": "src/audit/scorer.ts scores identity, verification, state, memory, constraints from loaded files",
       "status": "passing",
       "blocked_reason": "",
@@ -89,7 +89,7 @@
       "id": "feat-003",
       "priority": 3,
       "area": "audit",
-      "title": "Audit cross-ref — validate docs vs project reality",
+      "title": "Audit cross-ref \u2014 validate docs vs project reality",
       "user_visible_behavior": "src/audit/cross-ref.ts checks commands in AGENTS.md exist in package.json, modules in ARCHITECTURE.md match src/",
       "status": "passing",
       "blocked_reason": "",
@@ -105,14 +105,14 @@
         "npm run typecheck: zero errors",
         "npm run lint: clean"
       ],
-      "agent_notes": "Extracts npm run commands from bash blocks only (not prose). Detects modules via ← annotations.",
+      "agent_notes": "Extracts npm run commands from bash blocks only (not prose). Detects modules via \u2190 annotations.",
       "last_updated": "2026-06-04"
     },
     {
       "id": "feat-004",
       "priority": 4,
       "area": "audit",
-      "title": "Audit reporter — terminal and JSON output",
+      "title": "Audit reporter \u2014 terminal and JSON output",
       "user_visible_behavior": "npx aiready audit prints scored gap report to terminal; --json flag outputs valid JSON",
       "status": "passing",
       "blocked_reason": "",
@@ -128,16 +128,16 @@
         "npm test: 74 passed (cli 2, loader 13, scorer 32, cross-ref 14, reporter 13)",
         "npm run typecheck: zero errors",
         "npm run lint: clean",
-        "node dist/cli.js audit --target .: AI Readiness: 100/100 — all 5 subsystems shown with bars"
+        "node dist/cli.js audit --target .: AI Readiness: 100/100 \u2014 all 5 subsystems shown with bars"
       ],
-      "agent_notes": "audit/index.ts wires loader→scorer→cross-ref→reporter. cli.ts updated with --target, --json, --min-score options.",
+      "agent_notes": "audit/index.ts wires loader\u2192scorer\u2192cross-ref\u2192reporter. cli.ts updated with --target, --json, --min-score options.",
       "last_updated": "2026-06-04"
     },
     {
       "id": "feat-005",
       "priority": 5,
       "area": "audit",
-      "title": "Stage 1 integration — end-to-end audit verification",
+      "title": "Stage 1 integration \u2014 end-to-end audit verification",
       "user_visible_behavior": "npx aiready audit scores a well-harnessed repo > 70 and a bare repo < 30; --min-score exits 1 when below threshold",
       "status": "passing",
       "blocked_reason": "",
@@ -152,7 +152,7 @@
       ],
       "evidence": [
         "npm run build: dist/cli.js 15.49 KB, zero errors",
-        "npm test: 89 passed — cli 2, loader 13, scorer 32, cross-ref 14, reporter 13, integration 15",
+        "npm test: 89 passed \u2014 cli 2, loader 13, scorer 32, cross-ref 14, reporter 13, integration 15",
         "npm run typecheck: zero errors",
         "npm run lint: clean",
         "good-repo CLI: AI Readiness 100/100, exit 0",
@@ -203,15 +203,15 @@
         "npm test",
         "npm run typecheck",
         "npm run lint",
-        "node dist/cli.js audit --provider anthropic --model fast (no key) → exits 1 with ERROR/WHY/FIX",
-        "node dist/cli.js audit --help → shows --provider and --model flags"
+        "node dist/cli.js audit --provider anthropic --model fast (no key) \u2192 exits 1 with ERROR/WHY/FIX",
+        "node dist/cli.js audit --help \u2192 shows --provider and --model flags"
       ],
       "evidence": [
         "npm run build: dist/cli.js 25.73 KB, zero errors",
         "npm test: 112/112 (9 test files: cross-ref 14, mapper 8, scorer 11, prompt 10, reporter 16, llm 15, loader 22, cli 2, integration 14)",
         "npm run typecheck: zero errors",
         "npm run lint: clean",
-        "node dist/cli.js audit --provider anthropic --model fast (no key): exit 1 — ERROR/WHY/FIX with console.anthropic.com URL and Ollama suggestion",
+        "node dist/cli.js audit --provider anthropic --model fast (no key): exit 1 \u2014 ERROR/WHY/FIX with console.anthropic.com URL and Ollama suggestion",
         "node dist/cli.js audit --help: shows --provider and --model flags",
         "DECISIONS.md: new entry dated 2026-06-05 (provider abstraction)"
       ],
@@ -239,7 +239,7 @@
         "npm run lint: clean",
         "DECISIONS.md: new entry dated 2026-06-05 (dynamic/static model lists)"
       ],
-      "agent_notes": "models.ts is the single source for ANTHROPIC_MODELS and OPENAI_FALLBACK_MODELS. listOpenAIModels() in llm.ts fetches live, filters gpt-* chat models, sorts newest-first, returns fallback on any error. AuditConfig.modelId replaces modelTier — tier routing is internal to each provider's chat() method.",
+      "agent_notes": "models.ts is the single source for ANTHROPIC_MODELS and OPENAI_FALLBACK_MODELS. listOpenAIModels() in llm.ts fetches live, filters gpt-* chat models, sorts newest-first, returns fallback on any error. AuditConfig.modelId replaces modelTier \u2014 tier routing is internal to each provider's chat() method.",
       "last_updated": "2026-06-05"
     },
     {
@@ -317,7 +317,7 @@
       "id": "feat-012",
       "priority": 12,
       "area": "init",
-      "title": "Stage 2 init command — sequential artifact generation",
+      "title": "Stage 2 init command \u2014 sequential artifact generation",
       "user_visible_behavior": "npx aiready init reads .aiready/plan.md, generates or improves missing harness artifacts one at a time using LLM, shows before/after score delta; --dry-run previews without writing; --force overwrites existing files",
       "status": "passing",
       "blocked_reason": "",
@@ -343,7 +343,7 @@
       "id": "feat-013",
       "priority": 13,
       "area": "init",
-      "title": "Fix init pipeline — new plan format, non-canonical logic, async parser",
+      "title": "Fix init pipeline \u2014 new plan format, non-canonical logic, async parser",
       "user_visible_behavior": "npx aiready init correctly reads GENERATE/IMPROVE sections from plan.md, creates canonical artifacts instead of improving non-canonical files, never treats plan.md as an artifact target, and uses quality (non-fast) LLM calls",
       "status": "passing",
       "blocked_reason": "",
@@ -361,7 +361,7 @@
         "npm test: 188/188 (14 test files)",
         "node dist/cli.js init --target ./examples/bare-repo --dry-run: shows 4 would-generate items (AGENTS.md, PROGRESS.md, ARCHITECTURE.md, CONSTRAINTS.md)"
       ],
-      "agent_notes": "Three bugs fixed: (1) plan.md was treated as an improve target — fixed by isPlanFile() guard in both remediation.ts and parser.ts. (2) GENERATE items not extracted — fixed by changing renderRemediationMarkdown to emit ## GENERATE/## IMPROVE/## SOURCE CONTEXT sections and updating parser to read those. (3) Non-canonical files now trigger GENERATE of canonical artifact instead of IMPROVE of the non-canonical file. parsePlan is now async (fs/promises). source_signals renamed to source_files throughout. { fast: false } added to all LLM calls in generator and improver.",
+      "agent_notes": "Three bugs fixed: (1) plan.md was treated as an improve target \u2014 fixed by isPlanFile() guard in both remediation.ts and parser.ts. (2) GENERATE items not extracted \u2014 fixed by changing renderRemediationMarkdown to emit ## GENERATE/## IMPROVE/## SOURCE CONTEXT sections and updating parser to read those. (3) Non-canonical files now trigger GENERATE of canonical artifact instead of IMPROVE of the non-canonical file. parsePlan is now async (fs/promises). source_signals renamed to source_files throughout. { fast: false } added to all LLM calls in generator and improver.",
       "last_updated": "2026-06-05"
     },
     {
@@ -414,7 +414,7 @@
       "id": "feat-014",
       "priority": 14,
       "area": "init",
-      "title": "Stage 2 init rebuild — full canonical structure generation",
+      "title": "Stage 2 init rebuild \u2014 full canonical structure generation",
       "user_visible_behavior": "npx aiready init generates all 13 canonical harness artifacts (AGENTS.md, CONSTRAINTS.md, ARCHITECTURE.md, DECISIONS.md, PROGRESS.md, SESSION-HANDOFF.md, TASK.md, features.md, feature_list.json, QUALITY.md, Makefile, scripts/init.sh, scripts/verify.sh); shows plan preview with skip/improve/generate actions; asks for confirmation (--yes to skip); merges CLAUDE.md/.cursorrules etc. into AGENTS.md and writes shims; shows per-subsystem score delta",
       "status": "passing",
       "blocked_reason": "",
@@ -457,7 +457,7 @@
         "npm test: 237/237 (19 test files)",
         "node dist/cli.js init --target betterworld --dry-run: 8 IMPROVE, 5 SKIP, 0 GENERATE (matches plan.md)"
       ],
-      "agent_notes": "output.ts: cleanLLMOutput(). parser.ts: parse GENERATE/IMPROVE/SKIP/SOURCE CONTEXT. planner.ts: pure parser — no CANONICAL_ARTIFACTS loop. context.ts: sourcesAreThin(), resolveArtifactSources() with graphify always-on + thin expansion from SOURCE CONTEXT. graphify.ts: shared findGraphifyOutput/rankGraphifyFiles for audit loader and init. executor.ts: cleanLLMOutput before write; empty improve → generateArtifact. Tests: betterworld-mini graphify fixture, init-context.test.ts, init-output.test.ts.",
+      "agent_notes": "output.ts: cleanLLMOutput(). parser.ts: parse GENERATE/IMPROVE/SKIP/SOURCE CONTEXT. planner.ts: pure parser \u2014 no CANONICAL_ARTIFACTS loop. context.ts: sourcesAreThin(), resolveArtifactSources() with graphify always-on + thin expansion from SOURCE CONTEXT. graphify.ts: shared findGraphifyOutput/rankGraphifyFiles for audit loader and init. executor.ts: cleanLLMOutput before write; empty improve \u2192 generateArtifact. Tests: betterworld-mini graphify fixture, init-context.test.ts, init-output.test.ts.",
       "last_updated": "2026-06-05"
     },
     {
@@ -465,7 +465,7 @@
       "priority": 19,
       "area": "init",
       "title": "Expanded canonical artifact set, generateOnly flag, remove score-gated SKIP",
-      "user_visible_behavior": "npx aiready init generates 19 canonical artifacts (was 13): adds structure.md, feature-list-schema.json, quality-document.md, evaluator_rubric.md, clean-state-checklist.md, startup.md. Makefile/scripts/TASK/features/QUALITY/etc. are generateOnly — generated once and never automatically improved. Non-generateOnly artifacts always go to IMPROVE if they exist; no score threshold skips them. plan.md shows (template copy — no source context needed) for generateOnly GENERATE items.",
+      "user_visible_behavior": "npx aiready init generates 19 canonical artifacts (was 13): adds structure.md, feature-list-schema.json, quality-document.md, evaluator_rubric.md, clean-state-checklist.md, startup.md. Makefile/scripts/TASK/features/QUALITY/etc. are generateOnly \u2014 generated once and never automatically improved. Non-generateOnly artifacts always go to IMPROVE if they exist; no score threshold skips them. plan.md shows (template copy \u2014 no source context needed) for generateOnly GENERATE items.",
       "status": "passing",
       "blocked_reason": "",
       "verification": [
@@ -480,7 +480,7 @@
         "npm run lint: clean",
         "npm test: 310/310 (21 test files)"
       ],
-      "agent_notes": "CANONICAL_ARTIFACTS expanded to 19 entries in remediation.ts with generateOnly flag. isEmpty() exported — strips > note lines and {{placeholders}}, returns true if < 50 chars. buildInitPlan() re-derives all GENERATE/IMPROVE/SKIP decisions from CANONICAL_ARTIFACTS + filesystem; plan.md used only for overall score, subsystemSources, sourceContext. generator.ts short-circuits LLM call for all generateOnly artifacts. renderRemediationMarkdown shows '(template copy — no source context needed)' for generateOnly GENERATE items. init-planner.test.ts completely rewritten (16 tests). remediation.test.ts: 5 new renderRemediationMarkdown completeness tests, 7 CANONICAL_ARTIFACTS coverage tests.",
+      "agent_notes": "CANONICAL_ARTIFACTS expanded to 19 entries in remediation.ts with generateOnly flag. isEmpty() exported \u2014 strips > note lines and {{placeholders}}, returns true if < 50 chars. buildInitPlan() re-derives all GENERATE/IMPROVE/SKIP decisions from CANONICAL_ARTIFACTS + filesystem; plan.md used only for overall score, subsystemSources, sourceContext. generator.ts short-circuits LLM call for all generateOnly artifacts. renderRemediationMarkdown shows '(template copy \u2014 no source context needed)' for generateOnly GENERATE items. init-planner.test.ts completely rewritten (16 tests). remediation.test.ts: 5 new renderRemediationMarkdown completeness tests, 7 CANONICAL_ARTIFACTS coverage tests.",
       "last_updated": "2026-06-05"
     },
     {
@@ -526,7 +526,7 @@
         "npm run lint: clean",
         "npm test: 331/331 (23 test files)"
       ],
-      "agent_notes": "Module 1: generator.ts SYSTEM_PROMPT replaced with strict heading rules (exact character-for-character, lists '## Current State', '## Stack', '## What this is' as examples). Module 2: new src/init/corrector.ts with findDriftedHeadings() (Dice bigram similarity), replaceHeadings() (regex replace), correctHeadings() (deterministic + optional LLM for missing sections); wired into both executeGenerate and executeImprove before write; cleanLLMOutput applied to corrected output. Module 3: ora@5 spinner in executor.ts (not ora@8 — ESM-only breaks CJS bundle); spinner skipped for generateOnly artifacts; 7 spinner tests with vi.mock('ora'). DECISIONS.md updated with ora@5 rationale.",
+      "agent_notes": "Module 1: generator.ts SYSTEM_PROMPT replaced with strict heading rules (exact character-for-character, lists '## Current State', '## Stack', '## What this is' as examples). Module 2: new src/init/corrector.ts with findDriftedHeadings() (Dice bigram similarity), replaceHeadings() (regex replace), correctHeadings() (deterministic + optional LLM for missing sections); wired into both executeGenerate and executeImprove before write; cleanLLMOutput applied to corrected output. Module 3: ora@5 spinner in executor.ts (not ora@8 \u2014 ESM-only breaks CJS bundle); spinner skipped for generateOnly artifacts; 7 spinner tests with vi.mock('ora'). DECISIONS.md updated with ora@5 rationale.",
       "last_updated": "2026-06-05"
     },
     {
@@ -537,7 +537,12 @@
       "user_visible_behavior": "Audit scores each subsystem with one intent-based LLM question (can an agent do its job using only what is documented here?) with no structural checks; init generates/improves artifacts through a single executeArtifact() that restructures any content into canonical form via per-file prompts, sanitises placeholders, and suggests source files for cleanup at the end.",
       "status": "passing",
       "blocked_reason": "",
-      "verification": ["npm run build", "npm run typecheck", "npm run lint", "npm test"],
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ],
       "evidence": [
         "npm run build: dist/cli.js ~104 KB, zero errors",
         "npm run typecheck: clean",
@@ -556,7 +561,12 @@
       "user_visible_behavior": "Audit writes its plan to plan/plan.md; init writes non-entry markdown artifacts under docs/ while keeping agent entry points (AGENTS.md, CLAUDE.md, .cursorrules, .windsurfrules, copilot-instructions) and build files (Makefile, scripts/, *.json) at the repo root; generated artifacts cross-reference each other via docs/ paths so an agent knows where to look.",
       "status": "passing",
       "blocked_reason": "",
-      "verification": ["npm run build", "npm run typecheck", "npm run lint", "npm test"],
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ],
       "evidence": [
         "npm run build: zero errors",
         "npm run typecheck: clean",
@@ -572,10 +582,15 @@
       "priority": 23,
       "area": "audit+init",
       "title": "Stack-aware artifacts, stable scoring, remaining-gaps display",
-      "user_visible_behavior": "Generated Makefile/scripts/startup.md match the project's real toolchain (e.g. pytest/ruff on a Python repo, not npm); audit scores are stable between runs (temperature 0 + seed + score bands); CLI shows critical gaps as a numbered list, a 'REMAINING GAPS — why the score isn't 100' section after init, and a disclosure that scoring is LLM intent-based and may vary.",
+      "user_visible_behavior": "Generated Makefile/scripts/startup.md match the project's real toolchain (e.g. pytest/ruff on a Python repo, not npm); audit scores are stable between runs (temperature 0 + seed + score bands); CLI shows critical gaps as a numbered list, a 'REMAINING GAPS \u2014 why the score isn't 100' section after init, and a disclosure that scoring is LLM intent-based and may vary.",
       "status": "passing",
       "blocked_reason": "",
-      "verification": ["npm run build", "npm run typecheck", "npm run lint", "npm test"],
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test"
+      ],
       "evidence": [
         "npm run build: zero errors",
         "npm run typecheck: clean",
@@ -583,8 +598,33 @@
         "npm test: 352/352 (26 test files; +detect.test.ts, +scorer/rewriter/spinner cases)",
         "Live betterworld (Anthropic Sonnet): Makefile is pure Python (pytest/ruff/mypy/uvicorn), 0 npm refs, tab-indented; audit-twice variance 46 vs 43 (~3pt, was 14pt); standalone post-init audit 81/100 after the per-file scorer fix"
       ],
-      "agent_notes": "utils/detect.ts: detectStack() factual stack summary (Node/Python/Go/Rust/Ruby + scripts). rewriter: STACK_AWARE_FILES (Makefile, scripts/init.sh, scripts/verify.sh, startup.md) routed through LLM with DETECTED STACK block + per-file guidance; fixMakefileTabs repairs space-indented recipes. executor.isTemplateCopy excludes stack-aware. llm.ts ChatOptions {temperature, seed}; mapper+scorer pass {temperature:0, seed:7}; scorer prompt has explicit SCORE BANDS. scorer.buildSubsystemContent caps PER FILE (6000), entry files (AGENTS.md) ordered last, scoreRepo joins up to 16000 — fixes docs/ artifacts being crowded out (49->81). reporter: numbered critical gaps + SCORING_DISCLOSURE. init.printRemainingGaps after re-score; getAuditScoreDetailed returns per-subsystem gaps. integration tests pin DOTENV_CONFIG_PATH so repo .env never leaks.",
+      "agent_notes": "utils/detect.ts: detectStack() factual stack summary (Node/Python/Go/Rust/Ruby + scripts). rewriter: STACK_AWARE_FILES (Makefile, scripts/init.sh, scripts/verify.sh, startup.md) routed through LLM with DETECTED STACK block + per-file guidance; fixMakefileTabs repairs space-indented recipes. executor.isTemplateCopy excludes stack-aware. llm.ts ChatOptions {temperature, seed}; mapper+scorer pass {temperature:0, seed:7}; scorer prompt has explicit SCORE BANDS. scorer.buildSubsystemContent caps PER FILE (6000), entry files (AGENTS.md) ordered last, scoreRepo joins up to 16000 \u2014 fixes docs/ artifacts being crowded out (49->81). reporter: numbered critical gaps + SCORING_DISCLOSURE. init.printRemainingGaps after re-score; getAuditScoreDetailed returns per-subsystem gaps. integration tests pin DOTENV_CONFIG_PATH so repo .env never leaks.",
       "last_updated": "2026-06-15"
+    },
+    {
+      "id": "feat-024",
+      "priority": 24,
+      "area": "analyze",
+      "title": "Stage 3 analyze \u2014 two-level semantic gap detection",
+      "user_visible_behavior": "npx aiready analyze walks all source files, finds undocumented modules and behaviors, writes .aiready/gaps.md with proposed doc blocks",
+      "status": "passing",
+      "blocked_reason": "",
+      "verification": [
+        "npm run build",
+        "npm run typecheck",
+        "npm run lint",
+        "npm test",
+        "node dist/cli.js analyze --target ./betterworld --provider anthropic"
+      ],
+      "evidence": [
+        "npm run build: dist/cli.js ~152 KB, build success",
+        "npm run typecheck: zero errors",
+        "npm run lint: clean",
+        "npm test: 449/449 passed (32 test files, 81 new analyze tests)",
+        "analyze --target ./betterworld: 163 files walked, 163 LLM-analyzed, 163 gaps found, gaps.md written, ~540k tokens"
+      ],
+      "agent_notes": "Two-level: Level 1 string-match (no LLM, all files), Level 2 one LLM call per stack-relevant file. graphify-out skipped for walking but used for centrality ranking. rankSourceFilesWithGraph is separate from rankGraphifyFiles (which is .md-only). Python files get triple-quote docstrings, TS/JS get JSDoc \u2014 enforced by explicit user message header per file.",
+      "last_updated": "2026-06-22"
     }
   ]
 }

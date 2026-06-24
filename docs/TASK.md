@@ -1,48 +1,60 @@
-# TASK.md — Session 12: Init redesign (canonical rewrite)
+# TASK.md — Session 13: Stage 3 analyze command
 
 ## Feature
-feat-021 — Unified canonical rewriter + executor with per-file prompts
+feat-024 — `npx aiready analyze`: two-level semantic gap detection
 
 ## Scope
-- New `src/init/rewriter.ts`: `rewriteToCanonical()` (handles GENERATE + IMPROVE),
-  `sanitisePlaceholders()`, per-file prompt dispatch keyed by canonical filename
-  (rules from INIT-COMMAND-PROMPTS.md), folded-in deterministic heading correction
-  and 300-line cap.
-- `src/init/executor.ts`: replace `executeGenerate`/`executeImprove` with a single
-  `executeArtifact()` that resolves sources, reads current content, rewrites via
-  `rewriteToCanonical`, sanitises, writes. Keeps ora spinner, skip/force semantics,
-  generateOnly/blank-template copy path.
-- `src/init/index.ts`: call `executeArtifact`; add `suggestNoiseCleaning()` at the
-  end of `runInit()` after re-scoring.
-- Consolidator already only shims AGENT_ENTRY_FILES — verify, no change expected.
+- `src/utils/detect.ts`: add `detectSourceExtensions(targetDir): Set<string>` and
+  `SOURCE_EXTENSIONS` constant. Does NOT change `detectStack()` signature.
+- `src/utils/layout.ts`: add `gapsFilePath(target): string`.
+- `src/analyze/loader.ts` (new): `walkSourceFiles` (extension + skip-list, depth ≤ 6),
+  `rankSourceFilesWithGraph` (centrality scoring, separate from audit's `.md`-only
+  `rankGraphifyFiles`), `loadSourceFiles` → `SourceFiles { all, relevant, usedGraphify,
+  detectedExtensions }`.
+- `src/analyze/analyzer.ts` (new): `runStructuralPass` (no LLM, string match),
+  `runSemanticPass` (one LLM call per file, returns gap + proposed doc block),
+  `analyzeGaps` (merge Level 1 + Level 2). Proposed docs enforce language-correct
+  format: Python triple-quote, JS/TS JSDoc. File ext passed in user message header.
+- `src/analyze/reporter.ts` (new): `reportAnalysis` — STRUCTURAL GAPS / SEMANTIC GAPS
+  two-section terminal output with ✗/⚠ glyphs.
+- `src/analyze/writer.ts` (new): `renderGapsMd` + `writeGaps` → `.aiready/gaps.md`,
+  severity-grouped, language-appropriate code fences per proposed doc.
+- `src/analyze/index.ts`: replace `export {}` stub with `runAnalyze`.
+- `src/cli.ts`: register `analyze` command with `--target/--provider/--model`.
+- `package.json`: add `"vite": "^6.0.0"` to overrides (Node 18 / vite 7 incompatibility).
+- Tests: `analyze-loader`, `analyze-analyzer`, `analyze-reporter`, `analyze-writer`,
+  cli.test.ts additions. 81 new tests.
 
 ## Exclusions
-- Stage 3 (analyze) — not started this session.
-- No change to audit scorer beyond Module 1 (already committed).
-- generateOnly artifacts remain pure template copies (no LLM customization).
+- Stage 4 (drift) — not started.
+- No changes to audit or init pipelines.
 
-## Files expected to change
-- src/init/rewriter.ts (new)
-- src/init/executor.ts
-- src/init/index.ts
-- src/init/generator.ts (trim: keep loadTemplate/assertTemplateLoaded/BLANK_TEMPLATE_FILES/InitContext)
-- src/init/improver.ts (remove — subsumed by rewriter)
-- tests/init-rewriter.test.ts (new)
-- tests/init-executor.test.ts, tests/init-executor-spinner.test.ts, tests/init-generator.test.ts (retarget to new API)
+## Files changed
+- src/utils/detect.ts, src/utils/layout.ts
+- src/analyze/index.ts, loader.ts, analyzer.ts, reporter.ts, writer.ts (new)
+- src/cli.ts
+- package.json
+- tests/analyze-loader.test.ts, analyze-analyzer.test.ts, analyze-reporter.test.ts,
+  analyze-writer.test.ts (new); tests/cli.test.ts (additions)
 
 ## Verification standard
 ```
 npm run build && npm run typecheck && npm run lint && npm test
+node dist/cli.js analyze --target ./betterworld --provider anthropic
 ```
 
 ## Acceptance criteria
-- rewriteToCanonical uses exact template headings, includes existing content,
-  enforces 300-line cap, dispatches per-file prompts.
-- sanitisePlaceholders removes {{PLACEHOLDER}} text.
-- executeArtifact unifies generate/improve; suite green.
-- Noise cleanup suggestion prints at end of init.
+- `npx aiready analyze` registered in CLI, runs without error
+- Level 1 structural pass covers all walked files with no LLM calls
+- Level 2 semantic pass generates language-correct proposed doc blocks
+- `.aiready/gaps.md` written with severity-grouped findings + proposed docs
+- Python files get triple-quote docstrings; TS/JS files get JSDoc
+- CLI terminal output shows two-section STRUCTURAL / SEMANTIC summary
+- All verification commands pass (449 tests)
+- Smoke test on betterworld: gaps.md written, token count printed
 
 ## Invariants
-- `src/utils/llm.ts` is the only file importing LLM SDKs.
-- `ora` stays at ^5 (CJS bundle).
-- generateOnly artifacts skip the LLM (template copy).
+- `src/utils/llm.ts` is the only file importing LLM SDKs
+- `rankGraphifyFiles` in utils/graphify.ts is NOT modified (audit uses it, .md-only)
+- `detectStack()` signature unchanged (init/rewriter.ts uses it)
+- `ora` stays at ^5 (CJS bundle)

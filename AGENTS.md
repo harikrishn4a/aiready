@@ -15,19 +15,19 @@ Distributed via npx — zero install required.
 |---|---|---|---|
 | 1 | `npx aiready audit` | LLM-powered audit — scores 5 harness subsystems, writes `plan/plan.md` | **complete** |
 | 2 | `npx aiready init` | Reads plan.md + source context, generates missing harness artifacts | **current** |
-| 3 | `npx aiready analyze` | Reads code + Graphify graph, finds undocumented intent, writes `.aiready/gaps.md` | not started |
+| 3 | `npx aiready analyze` | Reads code + Graphify graph, finds undocumented intent, writes `.aiready/gaps.md` | **complete** |
 | 4 | `npx aiready drift` | Reads harness + git history, finds stale docs, writes `.aiready/drift.md` | not started |
 | 5 | `npx aiready fix` | Reads plan/gaps/drift, patches exactly what's wrong, shows diff before write | not started |
 
 See `docs/ARCHITECTURE.md` for full design detail on each stage.
 
 ## Current stage
-Stage 2 — `npx aiready init`
+Stage 3 complete — `npx aiready analyze` — next: Stage 4 `npx aiready drift`
 
-Reads `plan/plan.md` (written by Stage 1) and source context files
-listed in the plan. Generates or improves missing harness artifacts using
-the LLM. Each generated artifact is capped at 300 lines. Never overwrites
-existing files unless `--force` is passed.
+Stage 3 walks all source files, runs a structural string-match pass (no LLM)
+to find modules not mentioned in any harness doc, then runs a semantic LLM
+pass (one call per relevant file) to find inadequately documented behavior.
+Writes `.aiready/gaps.md` with proposed language-appropriate doc blocks per gap.
 
 ## Stack
 - Node.js 20+, TypeScript (strict)
@@ -45,7 +45,7 @@ aiready/
   src/
     audit/           ← Stage 1: LLM audit pipeline
     init/            ← Stage 2: artifact generation
-    analyze/         ← Stage 3: semantic gap analysis (stub)
+    analyze/         ← Stage 3: semantic gap analysis (complete)
     drift/           ← Stage 4: drift detection (stub)
     fix/             ← Stage 5: auto-remediation (stub)
     cli.ts           ← Commander entrypoint

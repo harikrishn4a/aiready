@@ -1,6 +1,6 @@
 {
   "name": "@sicilianwildcat/aiready",
-  "version": "0.1.22",
+  "version": "0.1.23",
   "description": "Audit repositories for AI agent readiness",
   "license": "MIT",
   "author": "harikrishn4a",
@@ -25,7 +25,8 @@
     "node": ">=20"
   },
   "overrides": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "vite": "^6.0.0"
   },
   "files": [
     "dist"

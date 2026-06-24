@@ -40,6 +40,11 @@ export function isDocsArtifact(filename: string): boolean {
   return artifactOutputPath(filename) !== filename;
 }
 
+/** Absolute path to the gaps file written by Stage 3 analyze. */
+export function gapsFilePath(target: string): string {
+  return join(target, '.aiready', 'gaps.md');
+}
+
 /**
  * True for aiready's OWN remediation plan path (new plan/ or legacy .aiready/).
  * A bare user-authored `plan.md` at the repo root is NOT ours and is a valid source.

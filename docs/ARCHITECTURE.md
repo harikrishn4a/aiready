@@ -17,7 +17,7 @@ All write operations require `--force` or a user prompt.
 |---|---|---|---|
 | 1 | `npx aiready audit` | LLM-powered intent-based audit — scores 5 harness subsystems, writes `plan/plan.md` | **complete** |
 | 2 | `npx aiready init` | Reads `plan/plan.md` + source context, writes canonical artifacts under `docs/` (entry points + Makefile stay at root) | **complete** |
-| 3 | `npx aiready analyze` | Reads code + Graphify graph, finds undocumented intent, writes `.aiready/gaps.md` | not started |
+| 3 | `npx aiready analyze` | Reads code + Graphify graph, finds undocumented intent, writes `.aiready/gaps.md` | **complete** |
 | 4 | `npx aiready drift` | Reads harness + git history, finds stale docs, writes `.aiready/drift.md` | not started |
 | 5 | `npx aiready fix` | Reads plan/gaps/drift, patches exactly what's wrong, shows diff before write | not started |
 
@@ -66,8 +66,20 @@ src/
     index.ts       ← runInit: plan → execute → consolidate → re-score →
                      suggestNoiseCleaning. Never overwrites without --force.
 
-  analyze/         ← Stage 3. LLM-assisted. Reads code + Graphify graph.
-                     Finds undocumented intent. Writes .aiready/gaps.md. (stub)
+  analyze/         ← Stage 3. LLM-assisted. Two-level gap detection.
+    index.ts       ← runAnalyze: discover → structural pass → semantic pass →
+                     write gaps.md → report. No --force needed (always overwrites).
+    loader.ts      ← walkSourceFiles (extension + skip-list, depth ≤ 6, no src/
+                     assumption). detectSourceExtensions filters to stack-relevant
+                     extensions. rankSourceFilesWithGraph ranks by graph centrality.
+    analyzer.ts    ← Level 1: runStructuralPass (string-match module names in
+                     harness text, no LLM). Level 2: runSemanticPass (one LLM call
+                     per relevant file: gap type + proposed doc block). Merges both;
+                     semantic finding wins over structural for the same module.
+    reporter.ts    ← formats terminal output: STRUCTURAL GAPS (✗) + SEMANTIC GAPS
+                     (⚠) sections, severity labels, token count, output path.
+    writer.ts      ← renderGapsMd + writeGaps. Creates .aiready/ dir, writes
+                     gaps.md grouped by severity with proposed doc blocks.
 
   drift/           ← Stage 4. LLM-assisted. Reads harness + git history.
                      Finds stale docs. Writes .aiready/drift.md. (stub)
@@ -85,10 +97,12 @@ src/
     tokens.ts      ← token estimation: Math.ceil(chars / 4).
     spinner.ts     ← TTY-only sea-green spinner. Silent in JSON/CI mode.
     layout.ts      ← artifact placement: PLAN_DIR/DOCS_DIR, planFilePath,
-                     artifactOutputPath (non-entry .md → docs/), isPlanPath.
+                     gapsFilePath (.aiready/gaps.md), artifactOutputPath
+                     (non-entry .md → docs/), isPlanPath.
     fs.ts          ← filesystem helpers (readFile, exists, listDirs, listFiles,
                      statMtime, walkMdFiles).
-    detect.ts      ← stack and package manager detection.
+    detect.ts      ← stack and package manager detection. detectSourceExtensions
+                     returns Set<string> of relevant file extensions for this repo.
 ```
 
 ---
@@ -188,13 +202,42 @@ re-score (before/after delta) → suggestNoiseCleaning()
 
 ---
 
-### Stage 3 — analyze (not started)
+### Stage 3 — analyze (complete)
 `npx aiready analyze [--target DIR] [--provider P] [--model M]`
 
-**Input:** repo source code + Graphify graph (when present)
+**Input:** repo source code + existing harness docs + Graphify graph (when present)
 
-Reads code and existing docs, finds semantic gaps: things the code does
-that are undocumented or inadequately explained. Writes `.aiready/gaps.md`.
+**Pipeline:**
+```
+target repo
+    ↓
+loadRepo()            reuse audit/loader — reads harness docs + graphifyPath
+loadSourceFiles()     walkSourceFiles (extension + skip-list, depth ≤ 6, no src/ assumption)
+                      detectSourceExtensions → relevant subset for Level 2
+                      rankSourceFilesWithGraph → centrality-ordered when graph present
+    ↓
+runStructuralPass()   Level 1 — no LLM. module name string-match vs harness text.
+                      O(n), covers ALL walked files. Flags undocumented-module.
+    ↓
+runSemanticPass()     Level 2 — one LLM call per relevant file.
+                      System prompt enforces language-appropriate doc format
+                      (.py → triple-quote docstring, .ts/.js → JSDoc).
+                      User message includes FILE + extension + REQUIRED FORMAT header.
+                      Returns: gap type + summary + proposed_doc + severity.
+    ↓
+analyzeGaps()         Merges Level 1 + Level 2. Semantic finding replaces structural
+                      for same module (has proposedDoc). Structural kept when
+                      Level 2 returns has_gap:false (structural absence is real).
+    ↓
+writeGaps()           Creates .aiready/, writes gaps.md grouped high→medium→low.
+                      Proposed doc blocks rendered in language-appropriate code fence.
+    ↓
+reportAnalysis()      STRUCTURAL GAPS (✗) + SEMANTIC GAPS (⚠) sections in terminal.
+                      Stack extensions, file counts, Graphify status, token usage.
+```
+
+**Output files written by Stage 3:**
+- `.aiready/gaps.md` — severity-grouped gap findings with proposed documentation
 
 ---
 
